@@ -1,0 +1,9 @@
+new_vault_client:
+  target: github.com/hashicorp/vault/api
+  struct: Config
+  new_field:
+    - name: otel_http_client
+      type: *http.Client
+  imports:
+    http: "net/http"
+  path: "github.com/open-telemetry/opentelemetry-go-compile-instrumentation/pkg/instrumentation/vault"
