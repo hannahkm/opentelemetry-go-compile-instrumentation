@@ -5,7 +5,6 @@ package instrument
 
 import (
 	"context"
-	"io"
 
 	"github.com/dave/dst"
 	"github.com/valyala/fasttemplate"
@@ -48,13 +47,9 @@ func (ip *InstrumentPhase) applyDirectiveRule(ctx context.Context, r *rule.InstD
 }
 
 // renderDirective executes the template with the given data and returns the
-// resulting Go source snippet.
+// resulting Go source snippet. Supported tags are the shared function
+// template variables (FuncName, FuncArgument N, FuncReturn N, ...); see
+// resolveFuncTag.
 func renderDirective(tmpl *fasttemplate.Template, data *funcTemplateData) (string, error) {
-	return tmpl.ExecuteFuncStringWithErr(func(w io.Writer, tag string) (int, error) {
-		n, handled, err := resolveFuncTag(w, tag, data)
-		if !handled {
-			return 0, ex.Newf("unknown template tag %q", tag)
-		}
-		return n, err
-	})
+	return renderFuncTemplate(tmpl, data)
 }
