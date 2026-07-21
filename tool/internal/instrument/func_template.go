@@ -70,8 +70,7 @@ const numTagFields = 2
 // one of these variables so callers can fall through to their own tag
 // handling (e.g. call templates' "{{ . }}" placeholder).
 func resolveFuncTag(w io.Writer, tag string, data *funcTemplateData) (int, bool, error) {
-	cleaned := strings.TrimSpace(tag)
-	cleaned = strings.Trim(cleaned, "-")
+	cleaned := strings.Trim(tag, "-")
 	cleaned = strings.TrimSpace(cleaned)
 
 	fields := strings.Fields(cleaned)
