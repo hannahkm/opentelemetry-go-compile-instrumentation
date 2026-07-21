@@ -54,6 +54,12 @@ func TestRenderDirective(t *testing.T) {
 			template: `println("static")`,
 			expected: `println("static")`,
 		},
+		{
+			name:     "nested composite literal left untouched",
+			src:      "package main\nfunc Foo() {}",
+			template: `attrs := []Point{{X: 1, Y: 2}}; call({{FuncName}})`,
+			expected: `attrs := []Point{{X: 1, Y: 2}}; call(Foo)`,
+		},
 	}
 
 	for _, tt := range tests {
@@ -70,15 +76,15 @@ func TestRenderDirective(t *testing.T) {
 	}
 }
 
-func TestRenderDirective_UnknownTag(t *testing.T) {
+func TestRenderDirective_UnrecognizedTagLeftUntouched(t *testing.T) {
 	funcDecl := parseFunc(t, "package main\nfunc Foo() {}")
 	tmpl, err := fasttemplate.NewTemplate("{{Bogus}}", "{{", "}}")
 	require.NoError(t, err)
 
-	_, err = renderDirective(tmpl, newFuncTemplateData(funcDecl))
+	result, err := renderDirective(tmpl, newFuncTemplateData(funcDecl))
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown template tag")
+	require.NoError(t, err)
+	assert.Equal(t, "{{Bogus}}", result)
 }
 
 func TestRenderDirective_OutOfRangeArgument(t *testing.T) {

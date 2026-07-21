@@ -49,11 +49,16 @@ func (ip *InstrumentPhase) applyDirectiveRule(ctx context.Context, r *rule.InstD
 
 // renderDirective executes the template with the given data and returns the
 // resulting Go source snippet.
+// A "{{ ... }}" span that doesn't resolve to a function template variables
+// is written back unchanged rather than treated as an error.
+// A span that does name one of these
+// variables but is otherwise malformed (bad index, wrong argument count, ...)
+// still fails with a descriptive error.
 func renderDirective(tmpl *fasttemplate.Template, data *funcTemplateData) (string, error) {
 	return tmpl.ExecuteFuncStringWithErr(func(w io.Writer, tag string) (int, error) {
 		n, handled, err := resolveFuncTag(w, tag, data)
 		if !handled {
-			return 0, ex.Newf("unknown template tag %q", tag)
+			return io.WriteString(w, "{{"+tag+"}}")
 		}
 		return n, err
 	})
