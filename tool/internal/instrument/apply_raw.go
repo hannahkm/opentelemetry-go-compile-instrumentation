@@ -41,7 +41,7 @@ func renameReturnValues(funcDecl *dst.FuncDecl) {
 
 // renderRawCode renders the shared function template variables (FuncName,
 // FuncArgument N, FuncReturn N, ...; see resolveFuncTag) in raw code injected
-// by a raw rule. Raw code that does not contain "{{" is returned unchanged
+// by a raw rule. Raw code that does not contain "{{" is returned unchanged.
 func renderRawCode(raw string, decl *dst.FuncDecl) (string, error) {
 	if !strings.Contains(raw, "{{") {
 		return raw, nil

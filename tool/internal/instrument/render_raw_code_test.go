@@ -47,6 +47,18 @@ func TestRenderRawCode(t *testing.T) {
 			raw:      "n={{FuncArgumentCount}} m={{FuncReturnCount}}",
 			expected: "n=2 m=2",
 		},
+		{
+			name:     "nested composite literal left untouched",
+			src:      "package main\nfunc Foo() {}",
+			raw:      `x := [][]int{{1, 2}, {3, 4}}`,
+			expected: `x := [][]int{{1, 2}, {3, 4}}`,
+		},
+		{
+			name:     "nested composite literal alongside a real placeholder",
+			src:      "package main\nfunc Foo() {}",
+			raw:      `attrs := []Point{{X: 1, Y: 2}}; call({{FuncName}})`,
+			expected: `attrs := []Point{{X: 1, Y: 2}}; call(Foo)`,
+		},
 	}
 
 	for _, tt := range tests {
@@ -61,13 +73,13 @@ func TestRenderRawCode(t *testing.T) {
 	}
 }
 
-func TestRenderRawCode_UnknownTag(t *testing.T) {
+func TestRenderRawCode_UnrecognizedTagLeftUntouched(t *testing.T) {
 	funcDecl := parseFunc(t, "package main\nfunc Foo() {}")
 
-	_, err := renderRawCode("{{Bogus}}", funcDecl)
+	result, err := renderRawCode("{{Foo}}", funcDecl)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown template tag")
+	require.NoError(t, err)
+	assert.Equal(t, "{{Foo}}", result)
 }
 
 func TestRenderRawCode_OutOfRangeArgument(t *testing.T) {
@@ -77,6 +89,15 @@ func TestRenderRawCode_OutOfRangeArgument(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "out of range")
+}
+
+func TestRenderRawCode_NonIntegerArgumentIndex(t *testing.T) {
+	funcDecl := parseFunc(t, "package main\nfunc Foo(a int) {}")
+
+	_, err := renderRawCode("{{FuncArgument abc}}", funcDecl)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not an integer")
 }
 
 func TestRenderRawCode_InvalidTemplateSyntax(t *testing.T) {
