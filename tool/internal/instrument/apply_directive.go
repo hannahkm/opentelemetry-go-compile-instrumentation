@@ -5,6 +5,7 @@ package instrument
 
 import (
 	"context"
+	"io"
 
 	"github.com/dave/dst"
 	"github.com/valyala/fasttemplate"
@@ -47,9 +48,18 @@ func (ip *InstrumentPhase) applyDirectiveRule(ctx context.Context, r *rule.InstD
 }
 
 // renderDirective executes the template with the given data and returns the
-// resulting Go source snippet. Supported tags are the shared function
-// template variables (FuncName, FuncArgument N, FuncReturn N, ...); see
-// resolveFuncTag.
+// resulting Go source snippet.
+// A "{{ ... }}" span that doesn't resolve to a function template variables
+// is written back unchanged rather than treated as an error.
+// A span that does name one of these
+// variables but is otherwise malformed (bad index, wrong argument count, ...)
+// still fails with a descriptive error.
 func renderDirective(tmpl *fasttemplate.Template, data *funcTemplateData) (string, error) {
-	return renderFuncTemplate(tmpl, data)
+	return tmpl.ExecuteFuncStringWithErr(func(w io.Writer, tag string) (int, error) {
+		n, handled, err := resolveFuncTag(w, tag, data)
+		if !handled {
+			return io.WriteString(w, "{{"+tag+"}}")
+		}
+		return n, err
+	})
 }
