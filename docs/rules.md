@@ -953,13 +953,13 @@ Top-level `imports` (map[string]string, optional): Additional imports needed by 
 
 **Template Placeholders:**
 
-| Placeholder             | Replaced with                                                            |
-| ------------------------ | --------------------------------------------------------------------- |
-| `{{FuncName}}`           | The name of the annotated function                                    |
-| `{{FuncArgument N}}`     | The identifier of the N-th (0-indexed) parameter, excluding the receiver |
-| `{{FuncReturn N}}`       | The identifier of the N-th (0-indexed) return value                   |
-| `{{FuncArgumentCount}}`  | The number of parameters, excluding the receiver                      |
-| `{{FuncReturnCount}}`    | The number of return values                                           |
+| Placeholder              | Replaced with                                                           |
+| ------------------------ | ----------------------------------------------------------------------- |
+| `{{FuncName}}`           | The name of the annotated function                                      |
+| `{{FuncArgument N}}`     | The identifier of the N-th (0-indexed) parameter, excluding the receiver|
+| `{{FuncReturn N}}`       | The identifier of the N-th (0-indexed) return value                     |
+| `{{FuncArgumentCount}}`  | The number of parameters, excluding the receiver                        |
+| `{{FuncReturnCount}}`    | The number of return values                                             |
 
 Unnamed parameters and return values (e.g. `func(int, string)`) and blank (`_`) names are assigned a synthetic name the first time a template references them, so they can be read via `{{FuncArgument N}}` / `{{FuncReturn N}}` like any other. An out-of-range index, a non-integer index, or an unrecognized placeholder fails the build with an error.
 
