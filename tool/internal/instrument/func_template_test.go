@@ -64,6 +64,29 @@ func TestResolveFuncTag_FuncArgumentExcludesReceiver(t *testing.T) {
 	assert.Equal(t, "x", buf.String())
 }
 
+func TestResolveFuncTag_VariadicArgument(t *testing.T) {
+	funcDecl := parseFunc(t, "package main\nfunc Foo(a string, b ...int) {}")
+	data := newFuncTemplateData(funcDecl)
+
+	var buf bytes.Buffer
+	_, handled, err := resolveFuncTag(&buf, "FuncArgument 0", data)
+	require.NoError(t, err)
+	assert.True(t, handled)
+	assert.Equal(t, "a", buf.String())
+
+	buf.Reset()
+	_, handled, err = resolveFuncTag(&buf, "FuncArgument 1", data)
+	require.NoError(t, err)
+	assert.True(t, handled)
+	assert.Equal(t, "b", buf.String())
+
+	buf.Reset()
+	_, handled, err = resolveFuncTag(&buf, "FuncArgumentCount", data)
+	require.NoError(t, err)
+	assert.True(t, handled)
+	assert.Equal(t, "2", buf.String())
+}
+
 func TestResolveFuncTag_FuncReturn(t *testing.T) {
 	funcDecl := parseFunc(t, "package main\nfunc Foo() (int, error) { return 0, nil }")
 	data := newFuncTemplateData(funcDecl)
