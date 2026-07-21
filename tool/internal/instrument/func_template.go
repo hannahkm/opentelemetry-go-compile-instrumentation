@@ -76,7 +76,7 @@ func resolveFuncTag(w io.Writer, tag string, data *funcTemplateData) (int, bool,
 	fields := strings.Fields(cleaned)
 	numFields := len(fields)
 	if numFields == 0 {
-		return 0, false, nil
+		return 0, false, ex.Newf("invalid template tag %q: empty tag", tag)
 	}
 
 	switch fields[0] {

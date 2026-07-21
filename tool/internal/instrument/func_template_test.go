@@ -11,6 +11,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestResolveFuncTag_Invalid(t *testing.T) {
+	tests := []struct {
+		name string
+		tag  string
+	}{
+		{"FuncArgumentCount", "FuncArgumentCount N"},
+		{"FuncReturnCount", "FuncReturnCount N"},
+	}
+
+	funcDecl := parseFunc(t, "package main\nfunc Foo() {}")
+	data := newFuncTemplateData(funcDecl)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			n, handled, err := resolveFuncTag(&buf, tt.tag, data)
+			require.Error(t, err)
+			assert.True(t, handled)
+			assert.Equal(t, 0, n)
+			assert.Equal(t, 0, buf.Len())
+		})
+	}
+}
+
 func TestResolveFuncTag_FuncName(t *testing.T) {
 	tests := []struct {
 		name string
@@ -173,6 +197,16 @@ func TestResolveFuncTag_UnknownTagNotHandled(t *testing.T) {
 	assert.False(t, handled)
 	assert.Equal(t, 0, n)
 	assert.Equal(t, 0, buf.Len())
+}
+
+func TestResolveFuncTag_EmptyTag(t *testing.T) {
+	funcDecl := parseFunc(t, "package main\nfunc Foo() {}")
+	data := newFuncTemplateData(funcDecl)
+
+	var buf bytes.Buffer
+	_, handled, err := resolveFuncTag(&buf, "", data)
+	require.Error(t, err)
+	assert.False(t, handled)
 }
 
 func TestResolveFuncTag_PlaceholderDotNotHandled(t *testing.T) {
