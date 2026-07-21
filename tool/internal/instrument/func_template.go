@@ -174,7 +174,7 @@ func renderFuncTemplate(tmpl *fasttemplate.Template, data *funcTemplateData) (st
 	return tmpl.ExecuteFuncStringWithErr(func(w io.Writer, tag string) (int, error) {
 		n, handled, err := resolveFuncTag(w, tag, data)
 		if !handled {
-			return 0, ex.Newf("unknown template tag %q", tag)
+			return io.WriteString(w, "{{"+tag+"}}")
 		}
 		return n, err
 	})

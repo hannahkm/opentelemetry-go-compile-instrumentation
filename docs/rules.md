@@ -610,7 +610,7 @@ This rule injects a string of raw Go code at the beginning of a target function.
 
 **Modifier (`do: - inject_code:`):**
 
-- `raw` (string, required): The raw Go code to be injected. The code will be inserted at the beginning of the target function. If the string contains `{{`, it is additionally rendered as a [fasttemplate](https://github.com/valyala/fasttemplate) template using the shared function template variables below before being parsed; code with no `{{` is injected verbatim, unaffected by this rendering step.
+- `raw` (string, required): The raw Go code to be injected. The code will be inserted at the beginning of the target function. If the string contains `{{`, it is additionally rendered as a [fasttemplate](https://github.com/valyala/fasttemplate) template using the shared function template variables below before being parsed; code with no `{{` is injected verbatim, unaffected by this rendering step. A `{{ ... }}` span that isn't one of the placeholders below (for example, incidental double braces from a nested composite literal like `[]Point{{X: 1, Y: 2}}`) is left untouched.
 
 Top-level `imports` (map[string]string, optional): A map of imports to inject into the target file. Required when the injected code references packages not already imported by the target. Same format as [Top-level fields](#top-level-fields).
 
@@ -624,7 +624,7 @@ Top-level `imports` (map[string]string, optional): A map of imports to inject in
 | `{{FuncArgumentCount}}`    | The number of parameters, excluding the receiver                     |
 | `{{FuncReturnCount}}`      | The number of return values                                          |
 
-Whitespace and `-` trim markers around the placeholder name are ignored, so `{{FuncName}}`, `{{ FuncName }}`, and `{{- FuncName -}}` are equivalent. Unnamed parameters and return values, and blank (`_`) names, are assigned a synthetic name the first time a template references them. An out-of-range index, a non-integer index, or an unrecognized placeholder fails the build with a descriptive error.
+Whitespace and `-` trim markers around the placeholder name are ignored, so `{{FuncName}}`, `{{ FuncName }}`, and `{{- FuncName -}}` are equivalent. Unnamed parameters and return values, and blank (`_`) names, are assigned a synthetic name the first time a template references them. A `{{ ... }}` span that names one of these placeholders but is otherwise malformed (an out-of-range index or a non-integer index) fails the build with a descriptive error. A span that doesn't name one of these placeholders at all is left untouched instead of failing the build, since raw Go code can legitimately contain `{{`/`}}` (see above).
 
 **Example with function template variables:**
 
