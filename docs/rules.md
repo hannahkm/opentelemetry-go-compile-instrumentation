@@ -616,13 +616,13 @@ Top-level `imports` (map[string]string, optional): A map of imports to inject in
 
 **Template Placeholders:**
 
-| Placeholder               | Replaced with                                                            |
-| -------------------------- | ------------------------------------------------------------------- |
-| `{{FuncName}}`             | The name of the target function                                     |
+| Placeholder                | Replaced with                                                            |
+| -------------------------- | ------------------------------------------------------------------------ |
+| `{{FuncName}}`             | The name of the target function                                          |
 | `{{FuncArgument N}}`       | The identifier of the N-th (0-indexed) parameter, excluding the receiver |
-| `{{FuncReturn N}}`         | The identifier of the N-th (0-indexed) return value                 |
-| `{{FuncArgumentCount}}`    | The number of parameters, excluding the receiver                     |
-| `{{FuncReturnCount}}`      | The number of return values                                          |
+| `{{FuncReturn N}}`         | The identifier of the N-th (0-indexed) return value                      |
+| `{{FuncArgumentCount}}`    | The number of parameters, excluding the receiver                         |
+| `{{FuncReturnCount}}`      | The number of return values                                              |
 
 Whitespace and `-` trim markers around the placeholder name are ignored, so `{{FuncName}}`, `{{ FuncName }}`, and `{{- FuncName -}}` are equivalent. Unnamed parameters and return values, and blank (`_`) names, are assigned a synthetic name the first time a template references them. A `{{ ... }}` span that names one of these placeholders but is otherwise malformed (an out-of-range index or a non-integer index) fails the build with a descriptive error. A span that doesn't name one of these placeholders at all is left untouched instead of failing the build, since raw Go code can legitimately contain `{{`/`}}` (see above).
 
