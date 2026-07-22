@@ -42,7 +42,7 @@ func (ip *InstrumentPhase) applyCallRule(ctx context.Context, r *rule.InstCallRu
 
 // walkCallsWithEnclosingFunc visits every *dst.CallExpr in root and invokes fn
 // with the call and the top-level *dst.FuncDecl that contains it. Returns nil for
-// callss outside any function body, e.g. a package-level variable
+// calls outside any function body, e.g. a package-level variable
 // initializer.
 func walkCallsWithEnclosingFunc(root *dst.File, fn func(call *dst.CallExpr, enclosing *dst.FuncDecl) bool) {
 	stopped := false
