@@ -4,6 +4,8 @@
 package instrument
 
 import (
+	"io"
+
 	"github.com/dave/dst"
 
 	"go.opentelemetry.io/otelc/tool/ex"
