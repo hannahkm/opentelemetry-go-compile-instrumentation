@@ -53,17 +53,32 @@ func (t *callTemplate) String() string {
 
 // compileExpression executes the template with the given expression node as
 // the placeholder value, parses the result, and returns the transformed expression.
+// enclosing is the function declaration that contains node, or
+// nil if node sits outside any function body (e.g. a package-level variable
+// initializer); when non-nil, it makes the shared function template
+// variables (FuncName, FuncArgument N, FuncReturn N, ...; see resolveFuncTag)
+// available in the template alongside {{ . }}.
 //
 // The process:
 // 1. Execute the template with a fixed placeholder string (_.PLACEHOLDER_0)
 // 2. Wrap the result in a minimal function and parse it
 // 3. Extract the expression from the parsed function
 // 4. Replace the placeholder with the actual AST node
-func (t *callTemplate) compileExpression(node dst.Expr) (dst.Expr, error) {
+func (t *callTemplate) compileExpression(node dst.Expr, enclosing *dst.FuncDecl) (dst.Expr, error) {
+	var funcData *funcTemplateData
+	if enclosing != nil {
+		funcData = newFuncTemplateData(enclosing)
+	}
+
 	// Execute the user's template with a fixed placeholder string.
 	// The TagFunc handles {{ . }}, {{.}}, and {{- . -}} variants by
-	// normalizing the tag content before matching.
+	// normalizing the tag content before matching, and delegates the shared
+	// Func* tags to resolveFuncTag before falling back to the "." placeholder.
 	userResult, err := t.template.ExecuteFuncStringWithErr(func(w io.Writer, tag string) (int, error) {
+		if n, handled, resolveErr := resolveFuncTag(w, tag, funcData); handled {
+			return n, resolveErr
+		}
+
 		// Trim spaces and optional trim markers (e.g. {{- . -}})
 		cleaned := strings.TrimSpace(tag)
 		cleaned = strings.Trim(cleaned, "-")
@@ -71,10 +86,12 @@ func (t *callTemplate) compileExpression(node dst.Expr) (dst.Expr, error) {
 		if cleaned == "." {
 			return io.WriteString(w, "_.PLACEHOLDER_0")
 		}
-		return 0, ex.Newf("unknown template tag %q; only {{ . }} is supported", tag)
+		return 0, ex.Newf(
+			"unknown template tag %q; only {{ . }} and the function template variables are supported", tag,
+		)
 	})
 	if err != nil {
-		return nil, ex.Newf("failed to execute template")
+		return nil, ex.Wrapf(err, "failed to execute template")
 	}
 
 	// Wrap the result in a minimal function so we can parse it as Go code.

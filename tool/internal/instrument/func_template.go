@@ -62,6 +62,18 @@ func (d *funcTemplateData) returns() []string {
 // "FuncArgument 0" splits into ["FuncArgument", "0"].
 const numTagFields = 2
 
+// isFuncTagVerb reports whether verb names one of the shared function
+// template variables, independent of whether it can currently be resolved
+// (e.g. for lack of an enclosing function).
+func isFuncTagVerb(verb string) bool {
+	switch verb {
+	case "FuncName", "FuncArgument", "FuncReturn", "FuncArgumentCount", "FuncReturnCount":
+		return true
+	default:
+		return false
+	}
+}
+
 // resolveFuncTag attempts to resolve a fasttemplate tag as one of the shared
 // function template variables (FuncName, FuncArgument N, FuncReturn N,
 // FuncArgumentCount, FuncReturnCount). The tag is trimmed of surrounding
@@ -70,6 +82,11 @@ const numTagFields = 2
 // It returns handled=false, with no write and no error, when the tag is not
 // one of these variables so callers can fall through to their own tag
 // handling (e.g. call templates' "{{ . }}" placeholder).
+//
+// data may be nil when a tag is evaluated at a position with no enclosing
+// function (e.g. a call wrapped inside a package-level variable
+// initializer); in that case a recognized Func* tag still reports
+// handled=true, but resolves to a descriptive error instead of a value.
 func resolveFuncTag(w io.Writer, tag string, data *funcTemplateData) (int, bool, error) {
 	cleaned := strings.Trim(tag, "-")
 	cleaned = strings.TrimSpace(cleaned)
@@ -78,6 +95,14 @@ func resolveFuncTag(w io.Writer, tag string, data *funcTemplateData) (int, bool,
 	numFields := len(fields)
 	if numFields == 0 {
 		return 0, false, ex.Newf("invalid template tag %q: empty tag", tag)
+	}
+	if !isFuncTagVerb(fields[0]) {
+		return 0, false, nil
+	}
+	if data == nil {
+		return 0, true, ex.Newf(
+			"invalid template tag %q: no enclosing function is available at this position", tag,
+		)
 	}
 
 	switch fields[0] {
