@@ -4,6 +4,8 @@
 package instrument
 
 import (
+	"io"
+
 	"github.com/dave/dst"
 	"github.com/valyala/fasttemplate"
 
