@@ -796,7 +796,7 @@ func Handler(name string) {
 
 | Placeholder                    | Replaced with                                                                                            |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| `{{FuncArgumentOfType <type>}}`    | The identifier of the first parameter of the **enclosing function** whose declared type matches `<type>` |
+| `{{FuncArgumentOfType <type>}}`| The identifier of the first parameter of the **enclosing function** whose declared type matches `<type>` |
 | `{{CallArgument N}}`           | The N-th (0-indexed) argument expression of the **matched call**                                         |
 | `{{CallArgumentCount}}`        | The number of arguments of the matched call                                                              |
 
