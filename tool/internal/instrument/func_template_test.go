@@ -209,6 +209,83 @@ func TestResolveFuncTag_EmptyTag(t *testing.T) {
 	assert.False(t, handled)
 }
 
+func TestFuncTemplateData_FuncArgumentOfType(t *testing.T) {
+	funcDecl := parseFunc(t, `package main
+
+import "context"
+
+func Foo(ctx context.Context, name string) {}
+`)
+	data := newFuncTemplateData(funcDecl)
+
+	name, found, err := data.funcArgumentOfType("context.Context")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, "ctx", name)
+
+	name, found, err = data.funcArgumentOfType("string")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, "name", name)
+}
+
+func TestFuncTemplateData_FuncArgumentOfType_PositionalIndependence(t *testing.T) {
+	// The string param comes before the context.Context param; the lookup
+	// must still find it by type, not by position.
+	funcDecl := parseFunc(t, `package main
+
+import "context"
+
+func Foo(name string, ctx context.Context) {}
+`)
+	data := newFuncTemplateData(funcDecl)
+
+	name, found, err := data.funcArgumentOfType("context.Context")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, "ctx", name)
+}
+
+func TestFuncTemplateData_FuncArgumentOfType_NoMatch(t *testing.T) {
+	funcDecl := parseFunc(t, "package main\nfunc Foo(name string) {}")
+	data := newFuncTemplateData(funcDecl)
+
+	_, found, err := data.funcArgumentOfType("error")
+	require.NoError(t, err)
+	assert.False(t, found)
+}
+
+func TestFuncTemplateData_FuncArgumentOfType_UnsupportedParamSkipped(t *testing.T) {
+	// The first parameter has a type node (func) that MatchesTypeName can't
+	// reason about; it must be skipped rather than aborting the scan, so the
+	// later matching string param is still found.
+	funcDecl := parseFunc(t, "package main\nfunc Foo(cb func(int) int, name string) {}")
+	data := newFuncTemplateData(funcDecl)
+
+	name, found, err := data.funcArgumentOfType("string")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, "name", name)
+}
+
+func TestFuncTemplateData_FuncArgumentOfType_InvalidTypeString(t *testing.T) {
+	funcDecl := parseFunc(t, "package main\nfunc Foo(name string) {}")
+	data := newFuncTemplateData(funcDecl)
+
+	_, _, err := data.funcArgumentOfType("[]string")
+	require.Error(t, err)
+}
+
+func TestFuncTemplateData_FuncArgumentOfType_UnnamedParamGetsSyntheticName(t *testing.T) {
+	funcDecl := parseFunc(t, "package main\nfunc Foo(string) {}")
+	data := newFuncTemplateData(funcDecl)
+
+	name, found, err := data.funcArgumentOfType("string")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.NotEmpty(t, name)
+}
+
 func TestResolveFuncTag_PlaceholderDotNotHandled(t *testing.T) {
 	// "." (used by call/decl templates) must fall through so callers can
 	// apply their own handling.

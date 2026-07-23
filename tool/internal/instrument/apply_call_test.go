@@ -138,6 +138,36 @@ var resp, _ = http.Get("url")
 	assert.Contains(t, err.Error(), "no enclosing function is available")
 }
 
+func TestApplyCallRule_FuncArgumentOfTypeAndCallArgument(t *testing.T) {
+	root := parseFile(t, `package main
+
+import (
+	"context"
+	"net/http"
+)
+
+func Handler(ctx context.Context, name string) {
+	http.Get("url")
+}
+`)
+	r := httpGetRule("traced({{ FuncArgumentOfType context.Context }}, {{ CallArgument 0 }}, {{ . }})")
+
+	err := newTestPhase().applyCallRule(context.Background(), r, root)
+
+	require.NoError(t, err)
+	handler := findFuncDeclInFile(t, root, "Handler")
+	stmt := handler.Body.List[0].(*dst.ExprStmt)
+	outerCall, ok := stmt.X.(*dst.CallExpr)
+	require.True(t, ok, "expected *dst.CallExpr after wrap, got %T", stmt.X)
+	require.Len(t, outerCall.Args, 3)
+	ctxArg, ok := outerCall.Args[0].(*dst.Ident)
+	require.True(t, ok, "expected *dst.Ident, got %T", outerCall.Args[0])
+	assert.Equal(t, "ctx", ctxArg.Name)
+	urlArg, ok := outerCall.Args[1].(*dst.BasicLit)
+	require.True(t, ok, "expected *dst.BasicLit, got %T", outerCall.Args[1])
+	assert.Equal(t, `"url"`, urlArg.Value)
+}
+
 // findFuncDeclInFile returns the top-level function declaration named name.
 func findFuncDeclInFile(t *testing.T, root *dst.File, name string) *dst.FuncDecl {
 	t.Helper()

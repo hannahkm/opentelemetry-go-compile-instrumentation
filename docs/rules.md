@@ -790,6 +790,51 @@ func Handler(name string) {
 }
 ```
 
+**`wrap_call`-only Template Variables:**
+
+`wrap_call`'s `replace` additionally supports three template variables:
+
+| Placeholder                    | Replaced with                                                                                            |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `{{FuncArgumentOfType <type>}}`    | The identifier of the first parameter of the **enclosing function** whose declared type matches `<type>` |
+| `{{CallArgument N}}`           | The N-th (0-indexed) argument expression of the **matched call**                                         |
+| `{{CallArgumentCount}}`        | The number of arguments of the matched call                                                              |
+
+`FuncArgumentOfType` requires an enclosing function and errors if none of its parameters have the given type. `CallArgument N` and `CallArgumentCount` need no enclosing function; an out-of-range or non-integer index fails the build with a descriptive error.
+
+```yaml
+wrap_println:
+  target: main
+  where:
+    function_call: fmt.Println
+  do:
+    - wrap_call:
+        replace: |-
+          (func() (int, error) {
+            println("id:", {{ FuncArgumentOfType int }}, "arg0:", {{ CallArgument 0 }})
+            return {{ . }}
+          })()
+```
+
+Given:
+
+```go
+func Handler(id int, name string) {
+    fmt.Println(name)
+}
+```
+
+`{{ FuncArgumentOfType int }}` resolves to `id` and `{{ CallArgument 0 }}` resolves to `name` (the wrapped call's own first argument):
+
+```go
+func Handler(id int, name string) {
+    (func() {
+        println("id:", id, "arg0:", name)
+        fmt.Println(name)
+    })()
+}
+```
+
 **`append_args` Semantics:**
 
 The `append_args` field appends one or more Go expressions as additional arguments to each matched call.

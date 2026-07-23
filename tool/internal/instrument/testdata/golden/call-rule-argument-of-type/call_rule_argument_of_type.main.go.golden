@@ -1,0 +1,14 @@
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package main
+
+import "fmt"
+
+func Handler(id int, name string) {
+	(func() {
+		fmt.Println("id:", id, "arg0:", name)
+	})()
+}
+
+func main() { Handler(42, "world") }

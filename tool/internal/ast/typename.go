@@ -39,39 +39,63 @@ func parseTypeName(s string) (parsedTypeName, error) {
 
 // matches reports whether the dst.Expr node represents this type.
 func (t parsedTypeName) matches(node dst.Expr) bool {
+	matched, ok := t.matchesAny(node)
+	if !ok {
+		util.Unimplemented(fmt.Sprintf("signature filter: unsupported type node %T", node))
+	}
+	return matched
+}
+
+// matchesAny reports whether node represents this type and whether node's
+// shape was recognized at all. An unsupported type node yields
+// (false, false) instead of aborting the process.
+//
+//nolint:revive // if we add named returns then nonamedreturns will complain
+func (t parsedTypeName) matchesAny(node dst.Expr) (bool, bool) {
 	switch n := node.(type) {
 	case *dst.Ident:
-		return !t.pointer && t.importPath == n.Path && t.name == n.Name
+		return !t.pointer && t.importPath == n.Path && t.name == n.Name, true
 
 	case *dst.SelectorExpr:
 		ident, ok := n.X.(*dst.Ident)
 		if !ok || ident.Path != "" {
-			return false
+			return false, true
 		}
-		return !t.pointer && t.importPath == ident.Name && t.name == n.Sel.Name
+		return !t.pointer && t.importPath == ident.Name && t.name == n.Sel.Name, true
 
 	case *dst.StarExpr:
 		inner := parsedTypeName{importPath: t.importPath, name: t.name}
-		return t.pointer && inner.matches(n.X)
+		matched, ok := inner.matchesAny(n.X)
+		return t.pointer && matched, ok
 
 	case *dst.IndexExpr:
 		// Generic type with a single type parameter (e.g. Seq[T]).
-		return !t.pointer && t.matches(n.X)
+		matched, ok := t.matchesAny(n.X)
+		return !t.pointer && matched, ok
 
 	case *dst.IndexListExpr:
 		// Generic type with multiple type parameters (e.g. Map[K, V]).
-		return !t.pointer && t.matches(n.X)
+		matched, ok := t.matchesAny(n.X)
+		return !t.pointer && matched, ok
 
 	case *dst.InterfaceType:
 		// Only the empty interface matches "any".
-		return len(n.Methods.List) == 0 && t.importPath == "" && t.name == "any"
+		return len(n.Methods.List) == 0 && t.importPath == "" && t.name == "any", true
 
 	default:
-		// Unsupported AST node types (chan, func, map, slice, array, interface
-		// literals) cannot be matched by type-name filters.
-		util.Unimplemented(fmt.Sprintf("signature filter: unsupported type node %T", node))
-		return false
+		return false, false
 	}
+}
+
+// MatchesTypeName reports whether node represents the Go type named by
+// typeStr (e.g. "error", "int", "context.Context", "*http.Request").
+func MatchesTypeName(node dst.Expr, typeStr string) (bool, error) {
+	tn, err := parseTypeName(typeStr)
+	if err != nil {
+		return false, err
+	}
+	matched, _ := tn.matchesAny(node)
+	return matched, nil
 }
 
 // fieldListContainsType reports whether any field in fields has a type that

@@ -8,6 +8,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/dave/dst"
@@ -18,6 +19,9 @@ import (
 	"go.opentelemetry.io/otelc/tool/ex"
 	toolast "go.opentelemetry.io/otelc/tool/internal/ast"
 )
+
+// placeholderDot is the sentinel selector name substituted for {{ . }}.
+const placeholderDot = "PLACEHOLDER_0"
 
 // callTemplate represents a code template that can be used to wrap or transform
 // Go expressions. It uses fasttemplate for template execution
@@ -58,23 +62,45 @@ func (t *callTemplate) String() string {
 // initializer); when non-nil, it makes the shared function template
 // variables (FuncName, FuncArgument N, FuncReturn N, ...; see resolveFuncTag)
 // available in the template alongside {{ . }}.
-//
-// The process:
-// 1. Execute the template with a fixed placeholder string (_.PLACEHOLDER_0)
-// 2. Wrap the result in a minimal function and parse it
-// 3. Extract the expression from the parsed function
-// 4. Replace the placeholder with the actual AST node
 func (t *callTemplate) compileExpression(node dst.Expr, enclosing *dst.FuncDecl) (dst.Expr, error) {
+	return t.compile(node, enclosing, nil)
+}
+
+// compileCall also  enables the wrap_call-only template variables
+// {{ FuncArgumentOfType <type> }}, {{ CallArgument N }}, and {{ CallArgumentCount }}.
+func (t *callTemplate) compileCall(call *dst.CallExpr, enclosing *dst.FuncDecl) (dst.Expr, error) {
+	return t.compile(call, enclosing, call)
+}
+
+// The process:
+//  1. Execute the template with fixed placeholder strings (_.PLACEHOLDER_0
+//     for {{ . }}, _.PLACEHOLDER_ARG_N for {{ CallArgument N }})
+//  2. Wrap the result in a minimal function and parse it
+//  3. Extract the expression from the parsed function
+//  4. Replace the placeholders with the actual AST nodes
+func (t *callTemplate) compile(node dst.Expr, enclosing *dst.FuncDecl, call *dst.CallExpr) (dst.Expr, error) {
 	var funcData *funcTemplateData
 	if enclosing != nil {
 		funcData = newFuncTemplateData(enclosing)
 	}
 
-	// Execute the user's template with a fixed placeholder string.
-	// The TagFunc handles {{ . }}, {{.}}, and {{- . -}} variants by
-	// normalizing the tag content before matching, and delegates the shared
-	// Func* tags to resolveFuncTag before falling back to the "." placeholder.
+	placeholders := make(map[string]dst.Node)
+
+	// Execute the user's template with fixed placeholder strings. The
+	// TagFunc handles {{ . }}, {{.}}, and {{- . -}} variants by normalizing
+	// the tag content before matching, and delegates the wrap_call-only tags
+	// (FuncArgumentOfType, CallArgument*) and the shared Func* tags to their
+	// resolvers before falling back to the "." placeholder. The "." branch
+	// registers node into placeholders lazily, just like CallArgument N
+	// registers its own entry in resolveCallTag, so a template that never
+	// references "." never requires node to appear in the output.
 	userResult, err := t.template.ExecuteFuncStringWithErr(func(w io.Writer, tag string) (int, error) {
+		if call != nil {
+			if n, handled, resolveErr := resolveCallTag(w, tag, funcData, call, placeholders); handled {
+				return n, resolveErr
+			}
+		}
+
 		if n, handled, resolveErr := resolveFuncTag(w, tag, funcData); handled {
 			return n, resolveErr
 		}
@@ -84,10 +110,12 @@ func (t *callTemplate) compileExpression(node dst.Expr, enclosing *dst.FuncDecl)
 		cleaned = strings.Trim(cleaned, "-")
 		cleaned = strings.TrimSpace(cleaned)
 		if cleaned == "." {
-			return io.WriteString(w, "_.PLACEHOLDER_0")
+			placeholders[placeholderDot] = node
+			return io.WriteString(w, "_."+placeholderDot)
 		}
 		return 0, ex.Newf(
-			"unknown template tag %q; only {{ . }} and the function template variables are supported", tag,
+			"unknown template tag %q; only {{ . }}, the function template variables, "+
+				"and (for wrap_call) FuncArgumentOfType/CallArgument are supported", tag,
 		)
 	})
 	if err != nil {
@@ -135,10 +163,19 @@ func (t *callTemplate) compileExpression(node dst.Expr, enclosing *dst.FuncDecl)
 		return nil, ex.Newf("expected expression statement, got %T", funcDecl.Body.List[0])
 	}
 
-	// Replace placeholder with the actual node
-	result, replaced := replacePlaceholder(exprStmt.X, node)
-	if !replaced {
-		return nil, ex.New("template output did not contain placeholder expression")
+	if len(placeholders) == 0 {
+		return nil, ex.New(
+			"template does not reference any placeholder " +
+				"(e.g. {{ . }}, FuncArgument N, FuncArgumentOfType <type>, CallArgument N)",
+		)
+	}
+
+	// Replace placeholders with the actual nodes.
+	result, replacedKeys := replacePlaceholders(exprStmt.X, placeholders)
+	for key := range placeholders {
+		if !replacedKeys[key] {
+			return nil, ex.Newf("template output did not contain expected placeholder %q", key)
+		}
 	}
 
 	resultExpr, ok := result.(dst.Expr)
@@ -147,6 +184,95 @@ func (t *callTemplate) compileExpression(node dst.Expr, enclosing *dst.FuncDecl)
 	}
 
 	return resultExpr, nil
+}
+
+// isCallTagVerb reports whether `verb` names one of the wrap_call-only
+// template variables.
+func isCallTagVerb(verb string) bool {
+	switch verb {
+	case "FuncArgumentOfType", "CallArgument", "CallArgumentCount":
+		return true
+	default:
+		return false
+	}
+}
+
+// resolveCallTag attempts to resolve a fasttemplate tag as one of the
+// wrap_call-only template variables: {{ FuncArgumentOfType <type> }} (a
+// parameter of the enclosing function matched by declared type),
+// {{ CallArgument N }} (the N-th argument of the matched call), and
+// {{ CallArgumentCount }}. The tag is trimmed of surrounding whitespace and
+// "-" trim markers (e.g. "{{- CallArgument 0 -}}") before matching.
+//
+// A resolved CallArgument N registers a clone of call.Args[N] under
+// "PLACEHOLDER_ARG_N" in placeholders and writes the matching
+// "_.PLACEHOLDER_ARG_N" sentinel. The caller swaps the sentinel back for
+// the real node after parsing.
+func resolveCallTag(
+	w io.Writer, tag string, funcData *funcTemplateData, call *dst.CallExpr, placeholders map[string]dst.Node,
+) (int, bool, error) {
+	cleaned := strings.Trim(tag, "-")
+	cleaned = strings.TrimSpace(cleaned)
+
+	fields := strings.Fields(cleaned)
+	if len(fields) == 0 || !isCallTagVerb(fields[0]) {
+		return 0, false, nil
+	}
+
+	switch fields[0] {
+	case "FuncArgumentOfType":
+		if len(fields) != numTagFields {
+			return 0, true, ex.Newf(
+				"invalid template tag %q: FuncArgumentOfType requires exactly one type argument", tag,
+			)
+		}
+		if funcData == nil {
+			return 0, true, ex.Newf(
+				"invalid template tag %q: no enclosing function is available at this position", tag,
+			)
+		}
+		name, found, err := funcData.funcArgumentOfType(fields[1])
+		if err != nil {
+			return 0, true, ex.Wrapf(err, "invalid template tag %q", tag)
+		}
+		if !found {
+			return 0, true, ex.Newf("invalid template tag %q: no parameter of type %q found", tag, fields[1])
+		}
+		n, writeErr := io.WriteString(w, name)
+		return n, true, writeErr
+
+	case "CallArgument":
+		if len(fields) != numTagFields {
+			return 0, true, ex.Newf(
+				"invalid template tag %q: CallArgument requires exactly one index argument", tag,
+			)
+		}
+		idx, convErr := strconv.Atoi(fields[1])
+		if convErr != nil {
+			return 0, true, ex.Newf(
+				"invalid template tag %q: CallArgument index %q is not an integer", tag, fields[1],
+			)
+		}
+		if idx < 0 || idx >= len(call.Args) {
+			return 0, true, ex.Newf(
+				"invalid template tag %q: CallArgument index %d out of range [0, %d)", tag, idx, len(call.Args),
+			)
+		}
+		key := "PLACEHOLDER_ARG_" + strconv.Itoa(idx)
+		placeholders[key] = dst.Clone(call.Args[idx])
+		n, writeErr := io.WriteString(w, "_."+key)
+		return n, true, writeErr
+
+	case "CallArgumentCount":
+		if len(fields) != 1 {
+			return 0, true, ex.Newf("invalid template tag %q: CallArgumentCount takes no argument", tag)
+		}
+		n, writeErr := io.WriteString(w, strconv.Itoa(len(call.Args)))
+		return n, true, writeErr
+
+	default:
+		return 0, false, nil
+	}
 }
 
 // parseGoExpression parses a Go expression string into a dst.Expr.
@@ -211,11 +337,11 @@ func parseSnippetFuncDecl(src, label string) (*dst.FuncDecl, error) {
 	return funcDecl, nil
 }
 
-// replacePlaceholder replaces all occurrences of _.PLACEHOLDER_0 in the AST
-// with the given node. This is used to inject the original call expression
-// into the template-generated code.
-func replacePlaceholder(node, replacement dst.Node) (dst.Node, bool) {
-	replaced := false
+// replacePlaceholders replaces every "_.PLACEHOLDER_*" selector expression in
+// node with its corresponding entry in placeholders.
+// Returns the resulting node along with which keys were actually found and replaced.
+func replacePlaceholders(node dst.Node, placeholders map[string]dst.Node) (dst.Node, map[string]bool) {
+	replaced := make(map[string]bool, len(placeholders))
 	result := dstutil.Apply(
 		node,
 		func(cursor *dstutil.Cursor) bool {
@@ -224,21 +350,28 @@ func replacePlaceholder(node, replacement dst.Node) (dst.Node, bool) {
 				return true
 			}
 
-			// Check if this is _.PLACEHOLDER_0
 			ident, ok := selectorExpr.X.(*dst.Ident)
 			if !ok || ident.Name != toolast.IdentIgnore {
 				return true
 			}
 
-			if selectorExpr.Sel.Name == "PLACEHOLDER_0" {
-				cursor.Replace(replacement)
-				replaced = true
-				return false
+			replacement, ok := placeholders[selectorExpr.Sel.Name]
+			if !ok {
+				return true
 			}
 
-			return true
+			cursor.Replace(replacement)
+			replaced[selectorExpr.Sel.Name] = true
+			return false
 		},
 		nil,
 	)
 	return result, replaced
+}
+
+// replacePlaceholder replaces all occurrences of _.PLACEHOLDER_0 in the AST
+// with the given node.
+func replacePlaceholder(node, replacement dst.Node) (dst.Node, bool) {
+	result, replaced := replacePlaceholders(node, map[string]dst.Node{placeholderDot: replacement})
+	return result, replaced[placeholderDot]
 }

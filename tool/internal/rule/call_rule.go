@@ -90,6 +90,16 @@ var funcNamePattern = regexp.MustCompile(`^(.+)\.([^\d\W]\w*)$`)
 // {{ . }}, {{.}}, {{- . -}}, {{ .  }}, etc.
 var replacePlaceholderPattern = regexp.MustCompile(`\{\{-?\s*\.\s*-?\}\}`)
 
+// anyTemplateTagPattern matches any fasttemplate tag span, e.g. {{ . }},
+// {{ FuncArgument 0 }}, {{ FuncArgumentOfType error }}, {{ CallArgument 0 }}.
+// Unlike replacePlaceholderPattern (used by decl "wrap", whose only valid
+// placeholder is {{ . }}), wrap_call's replace accepts any of its
+// placeholders, so this is a presence check only: it does not verify the tag
+// names itself, since which verbs are actually valid there is enforced at
+// instrumentation time (see resolveFuncTag/resolveCallTag in package
+// instrument) with a more specific error.
+var anyTemplateTagPattern = regexp.MustCompile(`\{\{.*?\}\}`)
+
 // NewInstCallRule loads and validates an InstCallRule from YAML data.
 func NewInstCallRule(data []byte, name string) (*InstCallRule, error) {
 	var r InstCallRule
@@ -134,8 +144,11 @@ func (r *InstCallRule) validate() error {
 	if strings.TrimSpace(r.Replace) == "" && len(r.AppendArgs) == 0 {
 		return ex.Newf("at least one of replace or append_args must be set")
 	}
-	if strings.TrimSpace(r.Replace) != "" && !replacePlaceholderPattern.MatchString(r.Replace) {
-		return ex.Newf("replace must contain {{ . }} placeholder (also accepts {{.}}, {{- . -}}, etc.)")
+	if strings.TrimSpace(r.Replace) != "" && !anyTemplateTagPattern.MatchString(r.Replace) {
+		return ex.Newf(
+			"replace must contain at least one template placeholder " +
+				"(e.g. {{ . }}, {{ FuncArgument N }}, {{ FuncArgumentOfType <type> }}, {{ CallArgument N }})",
+		)
 	}
 	for i, arg := range r.AppendArgs {
 		if strings.TrimSpace(arg) == "" {

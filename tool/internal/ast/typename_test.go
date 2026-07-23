@@ -125,6 +125,73 @@ func TestTypeNameMatches(t *testing.T) {
 	}
 }
 
+func TestMatchesTypeName(t *testing.T) {
+	tests := []struct {
+		name    string
+		typeStr string
+		node    dst.Expr
+		want    bool
+		wantErr bool
+	}{
+		{
+			name:    "builtin ident matches",
+			typeStr: "error",
+			node:    &dst.Ident{Name: "error"},
+			want:    true,
+		},
+		{
+			name:    "selector matches",
+			typeStr: "context.Context",
+			node: &dst.SelectorExpr{
+				X:   &dst.Ident{Name: "context"},
+				Sel: &dst.Ident{Name: "Context"},
+			},
+			want: true,
+		},
+		{
+			name:    "pointer matches",
+			typeStr: "*http.Request",
+			node: &dst.StarExpr{
+				X: &dst.SelectorExpr{
+					X:   &dst.Ident{Name: "http"},
+					Sel: &dst.Ident{Name: "Request"},
+				},
+			},
+			want: true,
+		},
+		{
+			name:    "mismatch",
+			typeStr: "error",
+			node:    &dst.Ident{Name: "string"},
+			want:    false,
+		},
+		{
+			name:    "unsupported node type does not error, does not match",
+			typeStr: "error",
+			node:    &dst.FuncType{Params: &dst.FieldList{}},
+			want:    false,
+		},
+		{
+			name:    "unparsable type string errors",
+			typeStr: "[]string",
+			node:    &dst.Ident{Name: "string"},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := MatchesTypeName(tt.node, tt.typeStr)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func mustContains(t *testing.T, fields *dst.FieldList, typeStr string) bool {
 	t.Helper()
 	ok, err := fieldListContainsType(fields, typeStr)

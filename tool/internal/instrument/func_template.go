@@ -58,6 +58,23 @@ func (d *funcTemplateData) returns() []string {
 	return d.rets
 }
 
+// funcArgumentOfType returns the identifier of the first parameter of the
+// matched function whose declared type matches typeStr (e.g.
+// "context.Context").
+func (d *funcTemplateData) funcArgumentOfType(typeStr string) (string, bool, error) {
+	d.arguments() // ensure synthetic names are assigned to unnamed/blank params
+	for _, field := range d.funcDecl.Type.Params.List {
+		matched, matchErr := ast.MatchesTypeName(field.Type, typeStr)
+		if matchErr != nil {
+			return "", false, matchErr
+		}
+		if matched {
+			return field.Names[0].Name, true, nil
+		}
+	}
+	return "", false, nil
+}
+
 // numTagFields is the field count of a well-formed indexed tag, e.g.
 // "FuncArgument 0" splits into ["FuncArgument", "0"].
 const numTagFields = 2

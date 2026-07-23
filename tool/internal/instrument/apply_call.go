@@ -86,7 +86,7 @@ func (*InstrumentPhase) applyCallReplace(
 		if !matchesCallRule(call, r, importAliases) {
 			return true
 		}
-		wrapped, wrapErr := tmpl.compileExpression(call, enclosing)
+		wrapped, wrapErr := tmpl.compileCall(call, enclosing)
 		if wrapErr != nil {
 			wrapError = wrapErr
 			return false

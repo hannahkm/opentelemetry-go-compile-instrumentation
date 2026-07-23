@@ -36,6 +36,17 @@ replace: "wrapper({{ . }})"
 			},
 		},
 		{
+			name: "replace with non-dot placeholder only",
+			yaml: `
+function_call: net/http.Get
+replace: "wrapper({{ CallArgument 0 }})"
+`,
+			ruleName: "wrap_http_get",
+			check: func(t *testing.T, r *InstCallRule) {
+				assert.Equal(t, "wrapper({{ CallArgument 0 }})", r.Replace)
+			},
+		},
+		{
 			name: "append_args only",
 			yaml: `
 function_call: net/http.Get
@@ -114,7 +125,7 @@ replace: "noPlaceholder()"
 `,
 			ruleName:    "bad",
 			wantErr:     true,
-			errContains: "replace must contain {{ . }} placeholder",
+			errContains: "replace must contain at least one template placeholder",
 		},
 		{
 			name: "empty append_args entry",

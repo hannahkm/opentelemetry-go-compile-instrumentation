@@ -1,0 +1,10 @@
+wrap_println:
+  target: main
+  where:
+    function_call: fmt.Println
+  do:
+    - wrap_call:
+        replace: |-
+          (func() {
+            fmt.Println("id:", {{ FuncArgumentOfType int }}, "arg0:", {{ CallArgument 0 }})
+          })()
