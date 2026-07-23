@@ -209,10 +209,11 @@ func isCallTagVerb(verb string) bool {
 // {{ CallArgumentCount }}. The tag is trimmed of surrounding whitespace and
 // "-" trim markers (e.g. "{{- CallArgument 0 -}}") before matching.
 //
-// A resolved CallArgument N registers a clone of call.Args[N] under
-// "PLACEHOLDER_ARG_N" in placeholders and writes the matching
-// "_.PLACEHOLDER_ARG_N" sentinel. The caller swaps the sentinel back for
-// the real node after parsing.
+// A resolved CallArgument N registers a decoration-stripped clone of
+// call.Args[N] and writes the matching "_.PLACEHOLDER_ARG_N" sentinel,
+// stripping its decorations (comments, blank lines, etc).
+// A replace template that also references {{ . }} keeps the matched call,
+// comments and all, intact at that other position.
 func resolveCallTag(
 	w io.Writer, tag string, funcData *funcTemplateData, call *dst.CallExpr, placeholders map[string]dst.Node,
 ) (int, bool, error) {
@@ -261,7 +262,9 @@ func resolveCallTag(
 			)
 		}
 		key := "PLACEHOLDER_ARG_" + strconv.Itoa(idx)
-		placeholders[key] = dst.Clone(call.Args[idx])
+		argClone := dst.Clone(call.Args[idx])
+		stripDecorations(argClone)
+		placeholders[key] = argClone
 		n, writeErr := io.WriteString(w, "_."+key)
 		return n, true, writeErr
 
@@ -275,6 +278,23 @@ func resolveCallTag(
 	default:
 		return 0, false, nil
 	}
+}
+
+// stripDecorations recursively clears every comment and blank-line
+// decoration from node and its descendants.
+func stripDecorations(node dst.Node) {
+	dstutil.Apply(node, func(cursor *dstutil.Cursor) bool {
+		n := cursor.Node()
+		if n == nil {
+			return true
+		}
+		decs := n.Decorations()
+		decs.Before = dst.None
+		decs.After = dst.None
+		decs.Start.Clear()
+		decs.End.Clear()
+		return true
+	}, nil)
 }
 
 // parseGoExpression parses a Go expression string into a dst.Expr.
@@ -342,6 +362,10 @@ func parseSnippetFuncDecl(src, label string) (*dst.FuncDecl, error) {
 // replacePlaceholders replaces every "_.PLACEHOLDER_*" selector expression in
 // node with its corresponding entry in placeholders.
 // Returns the resulting node along with which keys were actually found and replaced.
+//
+// Each occurrence gets its own dst.Clone of the registered node: a template
+// may reference the same placeholder (e.g. "{{ CallArgument 0 }}") more than
+// once.
 func replacePlaceholders(node dst.Node, placeholders map[string]dst.Node) (dst.Node, map[string]bool) {
 	replaced := make(map[string]bool, len(placeholders))
 	result := dstutil.Apply(
@@ -362,7 +386,7 @@ func replacePlaceholders(node dst.Node, placeholders map[string]dst.Node) (dst.N
 				return true
 			}
 
-			cursor.Replace(replacement)
+			cursor.Replace(dst.Clone(replacement))
 			replaced[selectorExpr.Sel.Name] = true
 			return false
 		},

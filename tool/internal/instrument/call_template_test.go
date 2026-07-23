@@ -186,6 +186,75 @@ func TestCompileCall_CallArgumentCount(t *testing.T) {
 	assert.Equal(t, `"3"`, lit.Value)
 }
 
+func TestCompileCall_CallArgument_RepeatedTagYieldsIndependentNodes(t *testing.T) {
+	// Referencing the same {{ CallArgument N }} twice must not alias the
+	// same AST node at both output positions - each occurrence needs its
+	// own independent node so later passes can't mutate one and affect
+	// the other.
+	tmpl, err := newCallTemplate("trace({{ CallArgument 0 }}, {{ CallArgument 0 }})")
+	require.NoError(t, err)
+
+	call := &dst.CallExpr{
+		Fun:  &dst.Ident{Name: "funcCall"},
+		Args: []dst.Expr{&dst.Ident{Name: "x"}},
+	}
+
+	result, err := tmpl.compileCall(call, nil)
+
+	require.NoError(t, err)
+	resultCall, ok := result.(*dst.CallExpr)
+	require.True(t, ok, "expected *dst.CallExpr, got %T", result)
+	require.Len(t, resultCall.Args, 2)
+
+	first, ok := resultCall.Args[0].(*dst.Ident)
+	require.True(t, ok, "expected *dst.Ident, got %T", resultCall.Args[0])
+	second, ok := resultCall.Args[1].(*dst.Ident)
+	require.True(t, ok, "expected *dst.Ident, got %T", resultCall.Args[1])
+
+	require.NotSame(t, first, second, "each occurrence of a repeated placeholder must be an independent node")
+
+	// Mutating one must not affect the other.
+	first.Name = "mutated"
+	assert.Equal(t, "x", second.Name)
+}
+
+func TestCompileCall_CallArgument_StripsDecorations(t *testing.T) {
+	// {{ CallArgument N }} extracts argument N as a standalone value; if it
+	// carries an attached comment, that comment must not follow it into its
+	// new position, since the comment belongs to the argument's original
+	// position within the matched call - which, when {{ . }} is also
+	// referenced, is still preserved verbatim.
+	tmpl, err := newCallTemplate("traced({{ CallArgument 0 }}, {{ . }})")
+	require.NoError(t, err)
+
+	arg := &dst.Ident{Name: "first"}
+	arg.Decs.End.Append("/* note */")
+	call := &dst.CallExpr{
+		Fun:  &dst.Ident{Name: "funcCall"},
+		Args: []dst.Expr{arg},
+	}
+
+	result, err := tmpl.compileCall(call, nil)
+
+	require.NoError(t, err)
+	resultCall, ok := result.(*dst.CallExpr)
+	require.True(t, ok, "expected *dst.CallExpr, got %T", result)
+	require.Len(t, resultCall.Args, 2)
+
+	extractedArg, ok := resultCall.Args[0].(*dst.Ident)
+	require.True(t, ok, "expected *dst.Ident, got %T", resultCall.Args[0])
+	assert.Equal(t, "first", extractedArg.Name)
+	assert.Empty(t, extractedArg.Decs.End,
+		"CallArgument N's extracted value should not carry the original's decorations")
+
+	embeddedCall, ok := resultCall.Args[1].(*dst.CallExpr)
+	require.True(t, ok, "expected the original call embedded via {{ . }}, got %T", resultCall.Args[1])
+	embeddedArg, ok := embeddedCall.Args[0].(*dst.Ident)
+	require.True(t, ok, "expected *dst.Ident, got %T", embeddedCall.Args[0])
+	assert.NotEmpty(t, embeddedArg.Decs.End,
+		"the original call embedded via {{ . }} should keep its own decorations")
+}
+
 func TestCompileCall_CallArgumentOutOfRangeErrors(t *testing.T) {
 	tmpl, err := newCallTemplate("traced({{ CallArgument 5 }}, {{ . }})")
 	require.NoError(t, err)
