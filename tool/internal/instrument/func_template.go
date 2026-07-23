@@ -83,8 +83,7 @@ const numTagFields = 2
 // trim markers (e.g. "{{- CallArgument 0 -}}", "{{- FuncName -}}") and splits
 // what remains into whitespace-separated fields.
 func cleanTagFields(tag string) []string {
-	cleaned := strings.TrimSpace(tag)
-	cleaned = strings.Trim(cleaned, "-")
+	cleaned := strings.Trim(tag, "-")
 	cleaned = strings.TrimSpace(cleaned)
 	return strings.Fields(cleaned)
 }

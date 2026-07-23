@@ -98,7 +98,11 @@ var replacePlaceholderPattern = regexp.MustCompile(`\{\{-?\s*\.\s*-?\}\}`)
 // names itself, since which verbs are actually valid there is enforced at
 // instrumentation time (see resolveFuncTag/resolveCallTag in package
 // instrument) with a more specific error.
-var anyTemplateTagPattern = regexp.MustCompile(`\{\{.*?\}\}`)
+//
+// The (?s) flag makes "." match newlines too, so a tag whose "{{"/"}}" span a
+// line break (e.g. a long tag hand-wrapped inside a YAML "|-" block) is still
+// recognized here, matching what fasttemplate itself accepts at runtime.
+var anyTemplateTagPattern = regexp.MustCompile(`(?s)\{\{.*?\}\}`)
 
 // NewInstCallRule loads and validates an InstCallRule from YAML data.
 func NewInstCallRule(data []byte, name string) (*InstCallRule, error) {

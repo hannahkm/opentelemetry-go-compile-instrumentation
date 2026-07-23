@@ -47,6 +47,19 @@ replace: "wrapper({{ CallArgument 0 }})"
 			},
 		},
 		{
+			name: "replace with tag split across a line break",
+			yaml: `
+function_call: net/http.Get
+replace: |-
+  wrapper({{ CallArgument
+  0 }})
+`,
+			ruleName: "wrap_http_get",
+			check: func(t *testing.T, r *InstCallRule) {
+				assert.Equal(t, "wrapper({{ CallArgument\n0 }})", r.Replace)
+			},
+		},
+		{
 			name: "append_args only",
 			yaml: `
 function_call: net/http.Get
