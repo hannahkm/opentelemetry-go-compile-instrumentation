@@ -9,7 +9,6 @@ import (
 	"go/token"
 	"io"
 	"strconv"
-	"strings"
 
 	"github.com/dave/dst"
 	"github.com/dave/dst/decorator"
@@ -18,6 +17,7 @@ import (
 
 	"go.opentelemetry.io/otelc/tool/ex"
 	toolast "go.opentelemetry.io/otelc/tool/internal/ast"
+	"go.opentelemetry.io/otelc/tool/util"
 )
 
 // placeholderDot is the sentinel selector name substituted for {{ . }}.
@@ -63,13 +63,13 @@ func (t *callTemplate) String() string {
 // variables (FuncName, FuncArgument N, FuncReturn N, ...; see resolveFuncTag)
 // available in the template alongside {{ . }}.
 func (t *callTemplate) compileExpression(node dst.Expr, enclosing *dst.FuncDecl) (dst.Expr, error) {
-	return t.compile(node, enclosing, nil)
+	return t.compile(node, enclosing, false)
 }
 
-// compileCall also  enables the wrap_call-only template variables
+// compileCall also enables the wrap_call-only template variables
 // {{ FuncArgumentOfType <type> }}, {{ CallArgument N }}, and {{ CallArgumentCount }}.
 func (t *callTemplate) compileCall(call *dst.CallExpr, enclosing *dst.FuncDecl) (dst.Expr, error) {
-	return t.compile(call, enclosing, call)
+	return t.compile(call, enclosing, true)
 }
 
 // The process:
@@ -78,10 +78,18 @@ func (t *callTemplate) compileCall(call *dst.CallExpr, enclosing *dst.FuncDecl) 
 //  2. Wrap the result in a minimal function and parse it
 //  3. Extract the expression from the parsed function
 //  4. Replace the placeholders with the actual AST nodes
-func (t *callTemplate) compile(node dst.Expr, enclosing *dst.FuncDecl, call *dst.CallExpr) (dst.Expr, error) {
+//
+// enableCallTags is true only for compileCall, whose node is always the
+// matched *dst.CallExpr itself; it makes the wrap_call-only tags available.
+func (t *callTemplate) compile(node dst.Expr, enclosing *dst.FuncDecl, enableCallTags bool) (dst.Expr, error) {
 	var funcData *funcTemplateData
 	if enclosing != nil {
 		funcData = newFuncTemplateData(enclosing)
+	}
+
+	var call *dst.CallExpr
+	if enableCallTags {
+		call = util.AssertType[*dst.CallExpr](node)
 	}
 
 	placeholders := make(map[string]dst.Node)
@@ -106,10 +114,7 @@ func (t *callTemplate) compile(node dst.Expr, enclosing *dst.FuncDecl, call *dst
 		}
 
 		// Trim spaces and optional trim markers (e.g. {{- . -}})
-		cleaned := strings.TrimSpace(tag)
-		cleaned = strings.Trim(cleaned, "-")
-		cleaned = strings.TrimSpace(cleaned)
-		if cleaned == "." {
+		if fields := cleanTagFields(tag); len(fields) == 1 && fields[0] == "." {
 			placeholders[placeholderDot] = node
 			return io.WriteString(w, "_."+placeholderDot)
 		}
@@ -211,10 +216,7 @@ func isCallTagVerb(verb string) bool {
 func resolveCallTag(
 	w io.Writer, tag string, funcData *funcTemplateData, call *dst.CallExpr, placeholders map[string]dst.Node,
 ) (int, bool, error) {
-	cleaned := strings.Trim(tag, "-")
-	cleaned = strings.TrimSpace(cleaned)
-
-	fields := strings.Fields(cleaned)
+	fields := cleanTagFields(tag)
 	if len(fields) == 0 || !isCallTagVerb(fields[0]) {
 		return 0, false, nil
 	}
@@ -367,11 +369,4 @@ func replacePlaceholders(node dst.Node, placeholders map[string]dst.Node) (dst.N
 		nil,
 	)
 	return result, replaced
-}
-
-// replacePlaceholder replaces all occurrences of _.PLACEHOLDER_0 in the AST
-// with the given node.
-func replacePlaceholder(node, replacement dst.Node) (dst.Node, bool) {
-	result, replaced := replacePlaceholders(node, map[string]dst.Node{placeholderDot: replacement})
-	return result, replaced[placeholderDot]
 }

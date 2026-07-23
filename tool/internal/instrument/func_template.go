@@ -79,6 +79,16 @@ func (d *funcTemplateData) funcArgumentOfType(typeStr string) (string, bool, err
 // "FuncArgument 0" splits into ["FuncArgument", "0"].
 const numTagFields = 2
 
+// cleanTagFields trims a fasttemplate tag of surrounding whitespace and "-"
+// trim markers (e.g. "{{- CallArgument 0 -}}", "{{- FuncName -}}") and splits
+// what remains into whitespace-separated fields.
+func cleanTagFields(tag string) []string {
+	cleaned := strings.TrimSpace(tag)
+	cleaned = strings.Trim(cleaned, "-")
+	cleaned = strings.TrimSpace(cleaned)
+	return strings.Fields(cleaned)
+}
+
 // isFuncTagVerb reports whether verb names one of the shared function
 // template variables, independent of whether it can currently be resolved
 // (e.g. for lack of an enclosing function).
@@ -105,10 +115,7 @@ func isFuncTagVerb(verb string) bool {
 // initializer); in that case a recognized Func* tag still reports
 // handled=true, but resolves to a descriptive error instead of a value.
 func resolveFuncTag(w io.Writer, tag string, data *funcTemplateData) (int, bool, error) {
-	cleaned := strings.Trim(tag, "-")
-	cleaned = strings.TrimSpace(cleaned)
-
-	fields := strings.Fields(cleaned)
+	fields := cleanTagFields(tag)
 	numFields := len(fields)
 	if numFields == 0 {
 		return 0, false, ex.Newf("invalid template tag %q: empty tag", tag)

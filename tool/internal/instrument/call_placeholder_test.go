@@ -29,7 +29,8 @@ func TestReplacePlaceholder_SingleOccurrence(t *testing.T) {
 	}
 
 	// Replace
-	result, replaced := replacePlaceholder(astWithPlaceholder, replacement)
+	result, replacedKeys := replacePlaceholders(astWithPlaceholder, map[string]dst.Node{placeholderDot: replacement})
+	replaced := replacedKeys[placeholderDot]
 
 	// Verify
 	resultCall, ok := result.(*dst.CallExpr)
@@ -61,7 +62,8 @@ func TestReplacePlaceholder_MultipleOccurrences(t *testing.T) {
 
 	replacement := &dst.Ident{Name: "value"}
 
-	result, replaced := replacePlaceholder(astWithPlaceholders, replacement)
+	result, replacedKeys := replacePlaceholders(astWithPlaceholders, map[string]dst.Node{placeholderDot: replacement})
+	replaced := replacedKeys[placeholderDot]
 
 	resultCall, ok := result.(*dst.CallExpr)
 	require.True(t, ok)
@@ -89,7 +91,8 @@ func TestReplacePlaceholder_NoPlaceholders(t *testing.T) {
 
 	replacement := &dst.Ident{Name: "shouldNotAppear"}
 
-	result, replaced := replacePlaceholder(astWithoutPlaceholder, replacement)
+	result, replacedKeys := replacePlaceholders(astWithoutPlaceholder, map[string]dst.Node{placeholderDot: replacement})
+	replaced := replacedKeys[placeholderDot]
 
 	// Verify AST is unchanged
 	resultCall, ok := result.(*dst.CallExpr)
@@ -122,7 +125,8 @@ func TestReplacePlaceholder_NestedStructure(t *testing.T) {
 
 	replacement := &dst.Ident{Name: "innerValue"}
 
-	result, replaced := replacePlaceholder(astWithNested, replacement)
+	result, replacedKeys := replacePlaceholders(astWithNested, map[string]dst.Node{placeholderDot: replacement})
+	replaced := replacedKeys[placeholderDot]
 
 	// Navigate to the nested location
 	outerCall, ok := result.(*dst.CallExpr)
@@ -151,7 +155,8 @@ func TestReplacePlaceholder_WrongSelectorPrefix(t *testing.T) {
 
 	replacement := &dst.Ident{Name: "shouldNotReplace"}
 
-	result, replaced := replacePlaceholder(astWithWrongPrefix, replacement)
+	result, replacedKeys := replacePlaceholders(astWithWrongPrefix, map[string]dst.Node{placeholderDot: replacement})
+	replaced := replacedKeys[placeholderDot]
 
 	// Verify not replaced
 	resultCall, ok := result.(*dst.CallExpr)
@@ -178,7 +183,8 @@ func TestReplacePlaceholder_WrongSelectorName(t *testing.T) {
 
 	replacement := &dst.Ident{Name: "shouldNotReplace"}
 
-	result, replaced := replacePlaceholder(astWithWrongName, replacement)
+	result, replacedKeys := replacePlaceholders(astWithWrongName, map[string]dst.Node{placeholderDot: replacement})
+	replaced := replacedKeys[placeholderDot]
 
 	// Verify not replaced
 	resultCall, ok := result.(*dst.CallExpr)
@@ -214,7 +220,8 @@ func TestReplacePlaceholder_ComplexAST(t *testing.T) {
 
 	replacement := &dst.Ident{Name: "replacedValue"}
 
-	result, replaced := replacePlaceholder(astComplex, replacement)
+	result, replacedKeys := replacePlaceholders(astComplex, map[string]dst.Node{placeholderDot: replacement})
+	replaced := replacedKeys[placeholderDot]
 
 	// Verify structure
 	binaryExpr, ok := result.(*dst.BinaryExpr)
@@ -246,7 +253,8 @@ func TestReplacePlaceholder_NonSelectorNode(t *testing.T) {
 
 	replacement := &dst.Ident{Name: "shouldNotAppear"}
 
-	result, replaced := replacePlaceholder(astWithLiteral, replacement)
+	result, replacedKeys := replacePlaceholders(astWithLiteral, map[string]dst.Node{placeholderDot: replacement})
+	replaced := replacedKeys[placeholderDot]
 
 	// Verify unchanged
 	resultCall, ok := result.(*dst.CallExpr)
