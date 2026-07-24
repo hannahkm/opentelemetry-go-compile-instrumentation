@@ -5,7 +5,6 @@ package instrument
 
 import (
 	"github.com/dave/dst"
-	"github.com/valyala/fasttemplate"
 
 	"go.opentelemetry.io/otelc/tool/ex"
 	"go.opentelemetry.io/otelc/tool/internal/ast"
@@ -85,17 +84,4 @@ func (d *funcTemplateData) FuncArgumentCount() int {
 // {{.FuncReturnCount}}
 func (d *funcTemplateData) FuncReturnCount() int {
 	return len(d.returns())
-}
-
-// renderFuncTemplate executes tmpl against the shared function template
-// variables (see resolveFuncTag) and returns the resulting text. Every tag
-// in tmpl must resolve via resolveFuncTag; an unresolved tag is an error.
-func renderFuncTemplate(tmpl *fasttemplate.Template, data *funcTemplateData) (string, error) {
-	return tmpl.ExecuteFuncStringWithErr(func(w io.Writer, tag string) (int, error) {
-		n, handled, err := resolveFuncTag(w, tag, data)
-		if !handled {
-			return io.WriteString(w, "{{"+tag+"}}")
-		}
-		return n, err
-	})
 }

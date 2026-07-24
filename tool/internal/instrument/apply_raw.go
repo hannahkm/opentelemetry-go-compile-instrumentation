@@ -13,7 +13,6 @@ import (
 	"github.com/dave/dst"
 	"github.com/dave/dst/decorator"
 	"github.com/dave/dst/dstutil"
-	"github.com/valyala/fasttemplate"
 
 	"go.opentelemetry.io/otelc/tool/ex"
 	"go.opentelemetry.io/otelc/tool/internal/ast"
@@ -43,17 +42,17 @@ func renameReturnValues(funcDecl *dst.FuncDecl) {
 }
 
 // renderRawCode renders the shared function template variables (FuncName,
-// FuncArgument N, FuncReturn N, ...; see resolveFuncTag) in raw code injected
-// by a raw rule. Raw code that does not contain "{{" is returned unchanged.
+// FuncArgument N, FuncReturn N, ...) in raw code injected by a raw rule. Raw
+// code that does not contain "{{" is returned unchanged.
 func renderRawCode(raw string, decl *dst.FuncDecl) (string, error) {
 	if !strings.Contains(raw, "{{") {
 		return raw, nil
 	}
-	tmpl, err := fasttemplate.NewTemplate(raw, "{{", "}}")
+	tmpl, err := rule.ParseFuncTemplate(raw)
 	if err != nil {
 		return "", ex.Wrap(err)
 	}
-	return renderFuncTemplate(tmpl, newFuncTemplateData(decl))
+	return tmpl.Execute(newFuncTemplateData(decl))
 }
 
 type insertPos struct {
