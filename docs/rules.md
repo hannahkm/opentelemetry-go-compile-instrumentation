@@ -739,7 +739,7 @@ Top-level `imports` (map[string]string, optional): Additional imports needed for
 
 **`replace` String System:**
 
-The `replace` field is rendered with [fasttemplate](https://github.com/valyala/fasttemplate) using `{{` / `}}` delimiters. This provides:
+The `replace` field uses Go's standard [text/template](https://pkg.go.dev/text/template) package for code generation. This provides:
 
 - **Placeholder Substitution**: `{{ . }}` is replaced with the original function call's AST node
 - **Type Safety**: The replace string is compiled at rule creation time and validated
@@ -753,7 +753,7 @@ Currently supported replace string features:
 
 **Function Template Variables:**
 
-In addition to `{{ . }}`, `replace` supports the shared function template variables — `{{FuncName}}`, `{{FuncArgument N}}`, `{{FuncReturn N}}`, `{{FuncArgumentCount}}`, and `{{FuncReturnCount}}`. These resolve against the **enclosing function**: the named top-level function whose body contains the matched call site (not the matched call's own arguments). Whitespace and `-` trim markers around the placeholder name are ignored, so `{{FuncName}}`, `{{ FuncName }}`, and `{{- FuncName -}}` are equivalent.
+In addition to `{{ . }}`, `replace` supports the shared function template variables, referenced as fields on the template's `.` — `{{.FuncName}}`, `{{.FuncArgument N}}`, `{{.FuncReturn N}}`, `{{.FuncArgumentCount}}`, and `{{.FuncReturnCount}}`. These resolve against the **enclosing function**: the named top-level function whose body contains the matched call site (not the matched call's own arguments). Whitespace and `-` trim markers around the placeholder are honored per normal `text/template` rules, so `{{.FuncName}}`, `{{ .FuncName }}`, and `{{- .FuncName -}}` are equivalent.
 
 A call site with no enclosing function has none of these available, so using one there fails the build with a descriptive error. Unnamed parameters and return values and blank (`_`) names, are assigned a synthetic name the first time a template references them.
 
@@ -766,7 +766,7 @@ wrap_println:
     - wrap_call:
         replace: |-
           (func() (int, error) {
-            println("handler arg:", {{ FuncArgument 0 }})
+            println("handler arg:", {{ .FuncArgument 0 }})
             return {{ . }}
           })()
 ```
@@ -779,7 +779,7 @@ func Handler(name string) {
 }
 ```
 
-`{{ FuncArgument 0 }}` resolves to `name`:
+`{{ .FuncArgument 0 }}` resolves to `name`:
 
 ```go
 func Handler(name string) {
