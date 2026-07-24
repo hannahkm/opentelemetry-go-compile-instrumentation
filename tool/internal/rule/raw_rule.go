@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/valyala/fasttemplate"
 	"go.opentelemetry.io/otelc/tool/ex"
 	"gopkg.in/yaml.v3"
 )
@@ -55,7 +54,7 @@ func (r *InstRawRule) validate() error {
 	}
 	// raw is only treated as a template when it contains "{{"
 	if strings.Contains(r.Raw, "{{") {
-		if _, err := fasttemplate.NewTemplate(r.Raw, "{{", "}}"); err != nil {
+		if _, err := ParseFuncTemplate(r.Raw); err != nil {
 			return ex.Wrapf(err, "invalid template syntax in raw")
 		}
 	}
