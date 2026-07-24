@@ -33,7 +33,7 @@ raw: "_ = 0"
 			yamlContent: `
 func: Bar
 target: main
-raw: "println({{ FuncArgument 0 }})"
+raw: "println({{ .FuncArgument 0 }})"
 `,
 			ruleName:    "templated-raw",
 			expectError: false,
