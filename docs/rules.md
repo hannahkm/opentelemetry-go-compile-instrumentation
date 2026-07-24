@@ -963,8 +963,6 @@ Top-level `imports` (map[string]string, optional): Additional imports needed by 
 
 Unnamed parameters and return values (e.g. `func(int, string)`) and blank (`_`) names are assigned a synthetic name the first time a template references them, so they can be read via `{{.FuncArgument N}}` / `{{.FuncReturn N}}` like any other. A `{{ ... }}` span that names one of these placeholders but is otherwise malformed (an out-of-range index) fails the build with an error.
 
-A `{{ ... }}` span that isn't a recognized template action (a `.`/`$`-prefixed reference or a control-flow keyword like `if`/`range`) is left untouched instead of failing the build. This lets templates contain Go double braces - e.g. a composite literal like `[]Point{{X: 1, Y: 2}}`.
-
 Because the template engine is Go's `text/template`, standard control-flow actions such as `{{if}}`/`{{else}}`/`{{end}}` and `{{range}}` are available alongside the placeholders above.
 
 **Example:**

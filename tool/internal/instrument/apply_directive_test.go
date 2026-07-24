@@ -56,12 +56,6 @@ func TestRenderDirective(t *testing.T) {
 			expected: `println("static")`,
 		},
 		{
-			name:     "nested composite literal left untouched",
-			src:      "package main\nfunc Foo() {}",
-			template: `attrs := []Point{{X: 1, Y: 2}}; call({{.FuncName}})`,
-			expected: `attrs := []Point{{X: 1, Y: 2}}; call(Foo)`,
-		},
-		{
 			name:     "trim markers",
 			src:      "package main\nfunc Foo() {}",
 			template: "call({{- .FuncName -}})",
@@ -83,15 +77,22 @@ func TestRenderDirective(t *testing.T) {
 	}
 }
 
-func TestRenderDirective_UnrecognizedTagLeftUntouched(t *testing.T) {
-	funcDecl := parseFunc(t, "package main\nfunc Foo() {}")
-	tmpl, err := rule.ParseDirectiveTemplate("{{Bogus}}")
-	require.NoError(t, err)
+func TestParseDirectiveTemplate_UnknownTagFails(t *testing.T) {
+	_, err := rule.ParseDirectiveTemplate("{{Bogus}}")
 
-	result, err := renderDirective(tmpl, newFuncTemplateData(funcDecl))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not defined")
+}
 
-	require.NoError(t, err)
-	assert.Equal(t, "{{Bogus}}", result)
+func TestParseDirectiveTemplate_CompositeLiteralFails(t *testing.T) {
+	// text/template treats every "{{ ... }}" as an action, so incidental
+	// adjacent Go braces (e.g. a composite literal like []Point{{X: 1, Y: 2}})
+	// fail to parse. Datadog/orchestrion's code.Template has the same
+	// limitation for the same reason (plain text/template.Parse with no
+	// escaping).
+	_, err := rule.ParseDirectiveTemplate(`attrs := []Point{{X: 1, Y: 2}}; call({{.FuncName}})`)
+
+	require.Error(t, err)
 }
 
 func TestRenderDirective_OutOfRangeArgument(t *testing.T) {

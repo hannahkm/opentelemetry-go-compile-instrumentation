@@ -47,12 +47,7 @@ func (ip *InstrumentPhase) applyDirectiveRule(ctx context.Context, r *rule.InstD
 }
 
 // renderDirective executes the template with the given data and returns the
-// resulting Go source snippet. A "{{ ... }}" span that isn't a recognized
-// template action (a field/method reference or control-flow keyword) is
-// written back unchanged rather than treated as an error. A span
-// that does name a function template variable but is otherwise malformed
-// (bad index, wrong argument count, ...) still fails with a descriptive
-// error.
+// resulting Go source snippet.
 func renderDirective(tmpl *rule.DirectiveTemplate, data *funcTemplateData) (string, error) {
 	return tmpl.Execute(data)
 }
