@@ -89,7 +89,7 @@ func TestApplyCallRule_NonCallExprResult(t *testing.T) {
 }
 
 func TestApplyCallRule_InvalidTemplate(t *testing.T) {
-	// An unclosed template tag fails fasttemplate parsing in newCallTemplate.
+	// An unclosed template tag fails text/template parsing in newCallTemplate.
 	file := makeCallFile(httpGetCall())
 	r := httpGetRule("wrapper({{")
 
@@ -108,7 +108,7 @@ func Handler(name string) {
 	http.Get("url")
 }
 `)
-	r := httpGetRule("traced({{ FuncArgument 0 }}, {{ . }})")
+	r := httpGetRule("traced({{ .FuncArgument 0 }}, {{ . }})")
 
 	err := newTestPhase().applyCallRule(context.Background(), r, root)
 
@@ -130,7 +130,7 @@ import "net/http"
 
 var resp, _ = http.Get("url")
 `)
-	r := httpGetRule("traced({{ FuncName }}, {{ . }})")
+	r := httpGetRule("traced({{ .FuncName }}, {{ . }})")
 
 	err := newTestPhase().applyCallRule(context.Background(), r, root)
 

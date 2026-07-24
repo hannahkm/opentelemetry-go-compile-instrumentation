@@ -42,7 +42,7 @@ func TestNewCallTemplate_EmptyTemplate(t *testing.T) {
 }
 
 func TestCompileExpression_FuncArgumentWithEnclosingFunc(t *testing.T) {
-	tmpl, err := newCallTemplate("traced({{ FuncArgument 0 }}, {{ . }})")
+	tmpl, err := newCallTemplate("traced({{ .FuncArgument 0 }}, {{ . }})")
 	require.NoError(t, err)
 
 	enclosing := parseFunc(t, "package main\nfunc Handler(name string) {}")
@@ -60,7 +60,7 @@ func TestCompileExpression_FuncArgumentWithEnclosingFunc(t *testing.T) {
 }
 
 func TestCompileExpression_FuncTagWithoutEnclosingFuncErrors(t *testing.T) {
-	tmpl, err := newCallTemplate("traced({{ FuncName }})")
+	tmpl, err := newCallTemplate("traced({{ .FuncName }})")
 	require.NoError(t, err)
 
 	originalCall := &dst.CallExpr{Fun: &dst.Ident{Name: "funcCall"}}

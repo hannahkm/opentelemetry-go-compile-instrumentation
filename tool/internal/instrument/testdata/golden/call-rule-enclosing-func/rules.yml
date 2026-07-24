@@ -6,6 +6,6 @@ wrap_println:
     - wrap_call:
         replace: |-
           (func() (int, error) {
-            println("handler arg:", {{ FuncArgument 0 }})
+            println("handler arg:", {{ .FuncArgument 0 }})
             return {{ . }}
           })()
