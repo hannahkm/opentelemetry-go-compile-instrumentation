@@ -60,18 +60,18 @@ type callTemplateData struct {
 }
 
 // String implements fmt.Stringer so "{{ . }}" renders as placeholderIdent.
-func (d *callTemplateData) String() string {
+func (*callTemplateData) String() string {
 	return placeholderIdent
 }
 
-func (d *callTemplateData) noEnclosingFuncErr() error {
+func noEnclosingFuncErr() error {
 	return ex.Newf("no enclosing function is available at this position")
 }
 
 // FuncName returns the enclosing function's name. Template usage: {{.FuncName}}
 func (d *callTemplateData) FuncName() (string, error) {
 	if d.enclosing == nil {
-		return "", d.noEnclosingFuncErr()
+		return "", noEnclosingFuncErr()
 	}
 	return d.enclosing.FuncName(), nil
 }
@@ -81,7 +81,7 @@ func (d *callTemplateData) FuncName() (string, error) {
 // {{.FuncArgument N}}
 func (d *callTemplateData) FuncArgument(idx int) (string, error) {
 	if d.enclosing == nil {
-		return "", d.noEnclosingFuncErr()
+		return "", noEnclosingFuncErr()
 	}
 	return d.enclosing.FuncArgument(idx)
 }
@@ -90,7 +90,7 @@ func (d *callTemplateData) FuncArgument(idx int) (string, error) {
 // the enclosing function. Template usage: {{.FuncReturn N}}
 func (d *callTemplateData) FuncReturn(idx int) (string, error) {
 	if d.enclosing == nil {
-		return "", d.noEnclosingFuncErr()
+		return "", noEnclosingFuncErr()
 	}
 	return d.enclosing.FuncReturn(idx)
 }
@@ -99,7 +99,7 @@ func (d *callTemplateData) FuncReturn(idx int) (string, error) {
 // function, excluding the receiver. Template usage: {{.FuncArgumentCount}}
 func (d *callTemplateData) FuncArgumentCount() (int, error) {
 	if d.enclosing == nil {
-		return 0, d.noEnclosingFuncErr()
+		return 0, noEnclosingFuncErr()
 	}
 	return d.enclosing.FuncArgumentCount(), nil
 }
@@ -108,7 +108,7 @@ func (d *callTemplateData) FuncArgumentCount() (int, error) {
 // function. Template usage: {{.FuncReturnCount}}
 func (d *callTemplateData) FuncReturnCount() (int, error) {
 	if d.enclosing == nil {
-		return 0, d.noEnclosingFuncErr()
+		return 0, noEnclosingFuncErr()
 	}
 	return d.enclosing.FuncReturnCount(), nil
 }
