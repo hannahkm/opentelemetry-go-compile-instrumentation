@@ -4,7 +4,7 @@
 # Use bash for all shell commands (required for pipefail and other bash features)
 SHELL := /bin/bash
 
-.PHONY: all test test-unit test-integration test-e2e format lint build build-all build/pkg install package clean \
+.PHONY: all test test-unit test-integration test-e2e format lint build build-all build/pkg install package clean setup-git \
         build-demo build-demo-grpc build-demo-http format/go format/yaml lint/go lint/yaml \
         lint/action lint/makefile lint/license-header lint/license-header/fix lint/dockerfile actionlint yamlfmt gotestfmt ratchet ratchet/pin \
         ratchet/update ratchet/check golangci-lint embedmd checkmake hadolint help docs check-embed check-api-sync check-golden-files \
@@ -157,6 +157,13 @@ build-all: build/pkg build/instrumentation package ## Build the instrumentation 
 		env GOOS=$$GOOS GOARCH=$$GOARCH $(GO_BUILD_CMD) -o dist/$(BINARY_NAME)-$$GOOS-$$GOARCH$$EXT ./$(TOOL_DIR); \
 	done
 	@echo "All builds completed. Artifacts in dist/"
+
+.PHONY: setup-git
+setup-git: ## Register the git merge driver so otelc-bundle.tgz stops blocking rebases/merges
+	@git config merge.otelc-bundle.name "Keep current otelc-bundle.tgz (regenerate with make package)"
+	@git config merge.otelc-bundle.driver ".github/scripts/merge-bundle.sh %A"
+	@echo "Configured git merge driver 'otelc-bundle'. Rebase/merge no longer stops on the bundle;"
+	@echo "run 'make package' afterwards to refresh tool/data/otelc-bundle.tgz."
 
 install: package ## Install otelc to $$GOPATH/bin (auto-packages instrumentation)
 	@echo "Installing otelc..."
@@ -762,7 +769,7 @@ lint-schema: ## Validate the local semantic-convention registry (schemas/otelc/)
 lint-schema: fetch-upstream-semconv
 	@echo "Validating otelc semantic-convention registry (schemas/otelc)..."
 	@# Guard: the upstream dependency pinned in the registry manifest must match .semconv-version.
-	@MANIFEST_VERSION=$$(grep -oE 'upstream-v[0-9]+\.[0-9]+\.[0-9]+' $(OTELC_REGISTRY_DIR)/registry_manifest.yaml | head -1 | sed -E 's/upstream-v//'); \
+	@MANIFEST_VERSION=$$(grep -oE 'upstream-v[0-9]+\.[0-9]+\.[0-9]+' "$(OTELC_REGISTRY_DIR)/registry_manifest.yaml" | head -1 | sed -E 's/upstream-v//'); \
 	SEMCONV_VERSION=$$(grep -E '^v[0-9]+\.[0-9]+\.[0-9]+' .semconv-version | head -1 | tr -d '[:space:]' | sed 's/^v//'); \
 	if [ -z "$$MANIFEST_VERSION" ]; then \
 		echo "::error::Could not read the upstream version from $(OTELC_REGISTRY_DIR)/registry_manifest.yaml"; \
