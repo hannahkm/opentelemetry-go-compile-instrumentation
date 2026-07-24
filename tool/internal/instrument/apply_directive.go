@@ -5,10 +5,9 @@ package instrument
 
 import (
 	"context"
-	"io"
 
 	"github.com/dave/dst"
-	"github.com/valyala/fasttemplate"
+
 	"go.opentelemetry.io/otelc/tool/ex"
 	"go.opentelemetry.io/otelc/tool/internal/ast"
 	"go.opentelemetry.io/otelc/tool/internal/rule"
@@ -21,7 +20,7 @@ func (ip *InstrumentPhase) applyDirectiveRule(ctx context.Context, r *rule.InstD
 	if err := ip.addRuleImports(ctx, root, r.Imports, r.Name); err != nil {
 		return err
 	}
-	tmpl, err := fasttemplate.NewTemplate(r.Template, "{{", "}}")
+	tmpl, err := rule.ParseDirectiveTemplate(r.Template)
 	if err != nil {
 		return ex.Wrap(err)
 	}
@@ -48,18 +47,12 @@ func (ip *InstrumentPhase) applyDirectiveRule(ctx context.Context, r *rule.InstD
 }
 
 // renderDirective executes the template with the given data and returns the
-// resulting Go source snippet.
-// A "{{ ... }}" span that doesn't resolve to a function template variables
-// is written back unchanged rather than treated as an error.
-// A span that does name one of these
-// variables but is otherwise malformed (bad index, wrong argument count, ...)
-// still fails with a descriptive error.
-func renderDirective(tmpl *fasttemplate.Template, data *funcTemplateData) (string, error) {
-	return tmpl.ExecuteFuncStringWithErr(func(w io.Writer, tag string) (int, error) {
-		n, handled, err := resolveFuncTag(w, tag, data)
-		if !handled {
-			return io.WriteString(w, "{{"+tag+"}}")
-		}
-		return n, err
-	})
+// resulting Go source snippet. A "{{ ... }}" span that isn't a recognized
+// template action (a field/method reference or control-flow keyword) is
+// written back unchanged rather than treated as an error. A span
+// that does name a function template variable but is otherwise malformed
+// (bad index, wrong argument count, ...) still fails with a descriptive
+// error.
+func renderDirective(tmpl *rule.DirectiveTemplate, data *funcTemplateData) (string, error) {
+	return tmpl.Execute(data)
 }

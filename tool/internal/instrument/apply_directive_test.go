@@ -8,7 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/valyala/fasttemplate"
+
+	"go.opentelemetry.io/otelc/tool/internal/rule"
 )
 
 func TestRenderDirective(t *testing.T) {
@@ -21,31 +22,31 @@ func TestRenderDirective(t *testing.T) {
 		{
 			name:     "FuncName no spaces",
 			src:      "package main\nfunc Foo() {}",
-			template: "call({{FuncName}})",
+			template: "call({{.FuncName}})",
 			expected: "call(Foo)",
 		},
 		{
 			name:     "FuncName with spaces",
 			src:      "package main\nfunc Foo() {}",
-			template: "call({{ FuncName }})",
+			template: "call({{ .FuncName }})",
 			expected: "call(Foo)",
 		},
 		{
 			name:     "FuncArgument",
 			src:      "package main\nfunc Foo(ctx int, name string) {}",
-			template: "use({{ FuncArgument 0 }}, {{ FuncArgument 1 }})",
+			template: "use({{ .FuncArgument 0 }}, {{ .FuncArgument 1 }})",
 			expected: "use(ctx, name)",
 		},
 		{
 			name:     "FuncReturn",
 			src:      "package main\nfunc Foo() (int, error) { return 0, nil }",
-			template: "check({{ FuncReturn 0 }}, {{ FuncReturn 1 }})",
+			template: "check({{ .FuncReturn 0 }}, {{ .FuncReturn 1 }})",
 			expected: "check(_unnamedRetVal0, _unnamedRetVal1)",
 		},
 		{
 			name:     "counts",
 			src:      "package main\nfunc Foo(a, b int) (int, error) { return 0, nil }",
-			template: "n={{FuncArgumentCount}} m={{FuncReturnCount}}",
+			template: "n={{.FuncArgumentCount}} m={{.FuncReturnCount}}",
 			expected: "n=2 m=2",
 		},
 		{
@@ -57,15 +58,21 @@ func TestRenderDirective(t *testing.T) {
 		{
 			name:     "nested composite literal left untouched",
 			src:      "package main\nfunc Foo() {}",
-			template: `attrs := []Point{{X: 1, Y: 2}}; call({{FuncName}})`,
+			template: `attrs := []Point{{X: 1, Y: 2}}; call({{.FuncName}})`,
 			expected: `attrs := []Point{{X: 1, Y: 2}}; call(Foo)`,
+		},
+		{
+			name:     "trim markers",
+			src:      "package main\nfunc Foo() {}",
+			template: "call({{- .FuncName -}})",
+			expected: "call(Foo)",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			funcDecl := parseFunc(t, tt.src)
-			tmpl, err := fasttemplate.NewTemplate(tt.template, "{{", "}}")
+			tmpl, err := rule.ParseDirectiveTemplate(tt.template)
 			require.NoError(t, err)
 
 			result, err := renderDirective(tmpl, newFuncTemplateData(funcDecl))
@@ -78,7 +85,7 @@ func TestRenderDirective(t *testing.T) {
 
 func TestRenderDirective_UnrecognizedTagLeftUntouched(t *testing.T) {
 	funcDecl := parseFunc(t, "package main\nfunc Foo() {}")
-	tmpl, err := fasttemplate.NewTemplate("{{Bogus}}", "{{", "}}")
+	tmpl, err := rule.ParseDirectiveTemplate("{{Bogus}}")
 	require.NoError(t, err)
 
 	result, err := renderDirective(tmpl, newFuncTemplateData(funcDecl))
@@ -89,7 +96,7 @@ func TestRenderDirective_UnrecognizedTagLeftUntouched(t *testing.T) {
 
 func TestRenderDirective_OutOfRangeArgument(t *testing.T) {
 	funcDecl := parseFunc(t, "package main\nfunc Foo() {}")
-	tmpl, err := fasttemplate.NewTemplate("{{FuncArgument 0}}", "{{", "}}")
+	tmpl, err := rule.ParseDirectiveTemplate("{{.FuncArgument 0}}")
 	require.NoError(t, err)
 
 	_, err = renderDirective(tmpl, newFuncTemplateData(funcDecl))
