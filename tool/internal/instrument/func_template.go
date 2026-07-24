@@ -4,10 +4,6 @@
 package instrument
 
 import (
-	"io"
-	"strconv"
-	"strings"
-
 	"github.com/dave/dst"
 	"github.com/valyala/fasttemplate"
 
@@ -16,8 +12,8 @@ import (
 )
 
 // funcTemplateData lazily exposes a matched function's name, arguments, and
-// return values to template renderers. Argument and return collection mutates
-// the underlying FuncDecl.
+// return values to text/template renderers. Argument and return collection
+// mutates the underlying FuncDecl.
 type funcTemplateData struct {
 	funcDecl *dst.FuncDecl
 
@@ -32,7 +28,8 @@ func newFuncTemplateData(funcDecl *dst.FuncDecl) *funcTemplateData {
 	return &funcTemplateData{funcDecl: funcDecl}
 }
 
-func (d *funcTemplateData) name() string {
+// FuncName returns the matched function's name. Template usage: {{.FuncName}}
+func (d *funcTemplateData) FuncName() string {
 	return d.funcDecl.Name.Name
 }
 
@@ -58,71 +55,36 @@ func (d *funcTemplateData) returns() []string {
 	return d.rets
 }
 
-// numTagFields is the field count of a well-formed indexed tag, e.g.
-// "FuncArgument 0" splits into ["FuncArgument", "0"].
-const numTagFields = 2
-
-// resolveFuncTag attempts to resolve a fasttemplate tag as one of the shared
-// function template variables (FuncName, FuncArgument N, FuncReturn N,
-// FuncArgumentCount, FuncReturnCount). The tag is trimmed of surrounding
-// whitespace and "-" trim markers (e.g. "{{- FuncName -}}") before matching.
-//
-// It returns handled=false, with no write and no error, when the tag is not
-// one of these variables so callers can fall through to their own tag
-// handling (e.g. call templates' "{{ . }}" placeholder).
-func resolveFuncTag(w io.Writer, tag string, data *funcTemplateData) (int, bool, error) {
-	cleaned := strings.Trim(tag, "-")
-	cleaned = strings.TrimSpace(cleaned)
-
-	fields := strings.Fields(cleaned)
-	numFields := len(fields)
-	if numFields == 0 {
-		return 0, false, ex.Newf("invalid template tag %q: empty tag", tag)
+// FuncArgument returns the identifier of the idx-th (0-indexed) parameter,
+// excluding the receiver. Template usage: {{.FuncArgument N}}
+func (d *funcTemplateData) FuncArgument(idx int) (string, error) {
+	args := d.arguments()
+	if idx < 0 || idx >= len(args) {
+		return "", ex.Newf("FuncArgument index %d out of range [0, %d)", idx, len(args))
 	}
-
-	switch fields[0] {
-	case "FuncName":
-		if numFields != 1 {
-			return 0, true, ex.Newf("invalid template tag %q: FuncName takes no argument", tag)
-		}
-		n, err := io.WriteString(w, data.name())
-		return n, true, err
-	case "FuncArgument":
-		return resolveIndexedTag(w, tag, fields, data.arguments(), "FuncArgument")
-	case "FuncReturn":
-		return resolveIndexedTag(w, tag, fields, data.returns(), "FuncReturn")
-	case "FuncArgumentCount":
-		if numFields != 1 {
-			return 0, true, ex.Newf("invalid template tag %q: FuncArgumentCount takes no argument", tag)
-		}
-		n, err := io.WriteString(w, strconv.Itoa(len(data.arguments())))
-		return n, true, err
-	case "FuncReturnCount":
-		if numFields != 1 {
-			return 0, true, ex.Newf("invalid template tag %q: FuncReturnCount takes no argument", tag)
-		}
-		n, err := io.WriteString(w, strconv.Itoa(len(data.returns())))
-		return n, true, err
-	default:
-		return 0, false, nil
-	}
+	return args[idx], nil
 }
 
-func resolveIndexedTag(w io.Writer, tag string, fields, values []string, verb string) (int, bool, error) {
-	if len(fields) != numTagFields {
-		return 0, true, ex.Newf("invalid template tag %q: %s requires exactly one index argument", tag, verb)
+// FuncReturn returns the identifier of the idx-th (0-indexed) return value.
+// Template usage: {{.FuncReturn N}}
+func (d *funcTemplateData) FuncReturn(idx int) (string, error) {
+	rets := d.returns()
+	if idx < 0 || idx >= len(rets) {
+		return "", ex.Newf("FuncReturn index %d out of range [0, %d)", idx, len(rets))
 	}
-	idx, convErr := strconv.Atoi(fields[1])
-	if convErr != nil {
-		return 0, true, ex.Newf("invalid template tag %q: %s index %q is not an integer", tag, verb, fields[1])
-	}
-	if idx < 0 || idx >= len(values) {
-		return 0, true, ex.Newf(
-			"invalid template tag %q: %s index %d out of range [0, %d)", tag, verb, idx, len(values),
-		)
-	}
-	n, err := io.WriteString(w, values[idx])
-	return n, true, err
+	return rets[idx], nil
+}
+
+// FuncArgumentCount returns the number of parameters, excluding the
+// receiver. Template usage: {{.FuncArgumentCount}}
+func (d *funcTemplateData) FuncArgumentCount() int {
+	return len(d.arguments())
+}
+
+// FuncReturnCount returns the number of return values. Template usage:
+// {{.FuncReturnCount}}
+func (d *funcTemplateData) FuncReturnCount() int {
+	return len(d.returns())
 }
 
 // renderFuncTemplate executes tmpl against the shared function template
