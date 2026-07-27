@@ -175,3 +175,11 @@ func TestMatchesTypeName(t *testing.T) {
 	_, err = MatchesTypeName(ctxType, "[]invalid")
 	assert.Error(t, err)
 }
+
+func TestMatchesTypeName_UnsupportedNodeDoesNotMatch(t *testing.T) {
+	sliceType := &dst.ArrayType{Elt: &dst.Ident{Name: "byte"}}
+
+	matched, err := MatchesTypeName(sliceType, "context.Context")
+	require.NoError(t, err)
+	assert.False(t, matched)
+}

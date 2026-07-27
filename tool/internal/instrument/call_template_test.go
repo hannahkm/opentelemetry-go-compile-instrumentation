@@ -108,6 +108,26 @@ func TestCompileExpression_FuncArgumentOfType_NotFound(t *testing.T) {
 	assert.Equal(t, `""`, lit.Value)
 }
 
+func TestCompileExpression_FuncArgumentOfType_SkipsUnsupportedParamTypes(t *testing.T) {
+	tmpl, err := newCallTemplate(`traced({{ .FuncArgumentOfType "context.Context" }}, {{ . }})`)
+	require.NoError(t, err)
+
+	// data []byte has a type shape (slice) that MatchesTypeName cannot
+	// compare against a plain type-name filter
+	enclosing := parseFunc(t, "package main\nfunc Handler(data []byte, ctx context.Context) {}")
+	originalCall := &dst.CallExpr{Fun: &dst.Ident{Name: "funcCall"}}
+
+	result, err := tmpl.compileExpression(originalCall, enclosing)
+
+	require.NoError(t, err)
+	resultCall, ok := result.(*dst.CallExpr)
+	require.True(t, ok, "expected *dst.CallExpr, got %T", result)
+	require.Len(t, resultCall.Args, 2)
+	argIdent, ok := resultCall.Args[0].(*dst.Ident)
+	require.True(t, ok, "expected *dst.Ident, got %T", resultCall.Args[0])
+	assert.Equal(t, "ctx", argIdent.Name)
+}
+
 func TestCompileExpression_FuncArgumentOfType_NoEnclosingFuncErrors(t *testing.T) {
 	tmpl, err := newCallTemplate(`traced({{ .FuncArgumentOfType "context.Context" }})`)
 	require.NoError(t, err)
@@ -181,13 +201,34 @@ func TestCompileExpression_CallArgumentOutOfRange(t *testing.T) {
 	assert.Contains(t, err.Error(), "out of range")
 }
 
+func TestCompileExpression_CallArgumentUnwrapsParens(t *testing.T) {
+	tmpl, err := newCallTemplate("wrap({{ .CallArgument 0 }}, {{ .CallArgumentCount }}, {{ . }})")
+	require.NoError(t, err)
+
+	call := &dst.CallExpr{
+		Fun:  &dst.Ident{Name: "f"},
+		Args: []dst.Expr{&dst.Ident{Name: "a"}},
+	}
+	parenthesized := &dst.ParenExpr{X: call}
+
+	result, err := tmpl.compileExpression(parenthesized, nil)
+
+	require.NoError(t, err)
+	resultCall, ok := result.(*dst.CallExpr)
+	require.True(t, ok, "expected *dst.CallExpr, got %T", result)
+	require.Len(t, resultCall.Args, 3)
+	arg, ok := resultCall.Args[0].(*dst.Ident)
+	require.True(t, ok, "expected *dst.Ident, got %T", resultCall.Args[0])
+	assert.Equal(t, "a", arg.Name)
+	countLit, ok := resultCall.Args[1].(*dst.BasicLit)
+	require.True(t, ok, "expected *dst.BasicLit, got %T", resultCall.Args[1])
+	assert.Equal(t, "1", countLit.Value)
+}
+
 func TestCompileExpression_CallArgumentRequiresCallExpr(t *testing.T) {
 	tmpl, err := newCallTemplate("wrap({{ .CallArgument 0 }})")
 	require.NoError(t, err)
 
-	// A package-level var/const initializer that isn't itself a call, e.g.
-	// `var x = 5` - CallArgument only makes sense for wrap_call's matched
-	// call site, not decl rule's arbitrary wrapped expression.
 	nonCall := &dst.BasicLit{Kind: token.INT, Value: "5"}
 
 	_, err = tmpl.compileExpression(nonCall, nil)

@@ -174,7 +174,7 @@ func (t *callTemplate) compileExpression(node dst.Expr, enclosing *dst.FuncDecl)
 	if enclosing != nil {
 		data.enclosing = newFuncTemplateData(enclosing)
 	}
-	if call, ok := node.(*dst.CallExpr); ok {
+	if call, ok := unwrap(node).(*dst.CallExpr); ok {
 		data.isCall = true
 		data.callArgs = call.Args
 	}
@@ -238,6 +238,17 @@ func (t *callTemplate) compileExpression(node dst.Expr, enclosing *dst.FuncDecl)
 	}
 
 	return resultExpr, nil
+}
+
+// unwrap strips any enclosing parentheses from expr, e.g. (foo()) -> foo().
+func unwrap(expr dst.Expr) dst.Expr {
+	for {
+		paren, ok := expr.(*dst.ParenExpr)
+		if !ok {
+			return expr
+		}
+		expr = paren.X
+	}
 }
 
 // parseGoExpression parses a Go expression string into a dst.Expr.
