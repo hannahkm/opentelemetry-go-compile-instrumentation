@@ -91,3 +91,13 @@ func fieldListContainsType(fields *dst.FieldList, typeStr string) (bool, error) 
 	}
 	return false, nil
 }
+
+// MatchesTypeName reports whether node's type matches the type-name string typeStr
+// Returns an error when typeStr cannot be parsed.
+func MatchesTypeName(node dst.Expr, typeStr string) (bool, error) {
+	tn, err := parseTypeName(typeStr)
+	if err != nil {
+		return false, err
+	}
+	return tn.matches(node), nil
+}

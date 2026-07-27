@@ -80,6 +80,26 @@ func (d *funcTemplateData) FuncArgumentCount() int {
 	return len(d.arguments())
 }
 
+// argumentOfType returns the identifier of the first parameter (excluding
+// the receiver) whose type matches typeStr or "" if no parameter matches.
+func (d *funcTemplateData) argumentOfType(typeStr string) (string, error) {
+	args := d.arguments() // ensures synthetic names are assigned first
+	idx := 0
+	for _, field := range d.funcDecl.Type.Params.List {
+		for range field.Names {
+			matched, err := ast.MatchesTypeName(field.Type, typeStr)
+			if err != nil {
+				return "", err
+			}
+			if matched {
+				return args[idx], nil
+			}
+			idx++
+		}
+	}
+	return "", nil
+}
+
 // FuncReturnCount returns the number of return values. Template usage:
 // {{.FuncReturnCount}}
 func (d *funcTemplateData) FuncReturnCount() int {
