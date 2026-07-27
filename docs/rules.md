@@ -761,7 +761,7 @@ Currently supported replace string features:
 | `{{.FuncArgumentCount}}`       | The number of parameters of the enclosing function, excluding the receiver                             |
 | `{{.FuncReturnCount}}`         | The number of return values of the enclosing function                                                  |
 | `{{.FuncArgumentOfType type}}` | The first parameter of the enclosing function, excluding the receiver, matching the given type         |
-| `{{.CallArgument N}}`          | The identifier of the N-th (0-indexed) argument of the wrapped call expression itself                  |
+| `{{.CallArgument N}}`          | The source text of the N-th (0-indexed) argument of the wrapped call expression itself                 |
 | `{{.CallArgumentCount}}`       | The number of arguments in the wrapped call expression itself                                          |
 
 These resolve against two different things: `Func*` placeholders describe the **enclosing function** (the named top-level function whose body contains the matched call site), while `Call*` placeholders describe **the matched call expression itself** — e.g. for `fmt.Println("hello", name)`, `{{.CallArgument 0}}` is the literal `"hello"`, not one of the enclosing function's parameters.
