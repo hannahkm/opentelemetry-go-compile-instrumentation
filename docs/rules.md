@@ -753,20 +753,24 @@ Currently supported replace string features:
 
 **Template Placeholders:**
 
-| Placeholder                    | Replaced with                                                                                      |
-| ------------------------------ | -------------------------------------------------------------------------------------------------- |
-| `{{.FuncName}}`                | The name of the annotated function                                                                 |
-| `{{.FuncArgument N}}`          | The identifier of the N-th (0-indexed) parameter of the enclosing function, excluding the receiver |
-| `{{.FuncReturn N}}`            | The identifier of the N-th (0-indexed) return value of the enclosing function                      |
-| `{{.FuncArgumentCount}}`       | The number of parameters of the enclosing function, excluding the receiver                         |
-| `{{.FuncReturnCount}}`         | The number of return values of the enclosing function                                              |
-| `{{.FuncArgumentOfType type}}` | The first parameter of the enclosing function, excluding the receiver, matching the given type     |
-| `{{.CallArgument N}}`          | The identifier of the N-th (0-indexed) parameter of the enclosed function                          |
-| `{{.CallArgumentCount}}`       | The number of parameters of the enclosed function, excluding the receiver                          |
+| Placeholder                    | Replaced with                                                                                          |
+| ------------------------------ | -----------------------------------------------------------------------------------------------------  |
+| `{{.FuncName}}`                | The name of the annotated function                                                                     |
+| `{{.FuncArgument N}}`          | The identifier of the N-th (0-indexed) parameter of the enclosing function, excluding the receiver     |
+| `{{.FuncReturn N}}`            | The identifier of the N-th (0-indexed) return value of the enclosing function                          |
+| `{{.FuncArgumentCount}}`       | The number of parameters of the enclosing function, excluding the receiver                             |
+| `{{.FuncReturnCount}}`         | The number of return values of the enclosing function                                                  |
+| `{{.FuncArgumentOfType type}}` | The first parameter of the enclosing function, excluding the receiver, matching the given type         |
+| `{{.CallArgument N}}`          | The identifier of the N-th (0-indexed) argument of the wrapped call expression itself                  |
+| `{{.CallArgumentCount}}`       | The number of arguments in the wrapped call expression itself                                          |
+
+These resolve against two different things: `Func*` placeholders describe the **enclosing function** (the named top-level function whose body contains the matched call site), while `Call*` placeholders describe **the matched call expression itself** — e.g. for `fmt.Println("hello", name)`, `{{.CallArgument 0}}` is the literal `"hello"`, not one of the enclosing function's parameters.
+
+A call site with no enclosing function (e.g. a package-level variable initializer) has none of the `Func*` placeholders available, so using one there fails the build with a descriptive error. `Call*` placeholders don't need an enclosing function, but only work when the wrapped expression is itself a function call — using one on a non-call expression (e.g. a decl rule's `wrap` applied to `var x = 5`) also fails the build with a descriptive error. `FuncArgumentOfType` never errors when no parameter matches; check for `!= ""` (or similar) in the template if that case needs to be handled explicitly.
 
 Whitespace and `-` trim markers around the placeholder are honored per normal `text/template` rules, so `{{.FuncName}}`, `{{ .FuncName }}`, and `{{- .FuncName -}}` are equivalent. Unnamed parameters and return values and blank (`_`) names, are assigned a synthetic name the first time a template references them.
 
-**Example:**
+**Example: `FuncArgument`**
 
 ```yaml
 wrap_println:
@@ -801,7 +805,7 @@ func Handler(name string) {
 }
 ```
 
-**Example**
+**Example: `CallArgument` and `FuncArgumentOfType`**
 
 ```yaml
 wrap_println:
