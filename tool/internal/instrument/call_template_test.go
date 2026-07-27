@@ -4,6 +4,7 @@
 package instrument
 
 import (
+	"go/token"
 	"testing"
 
 	"github.com/dave/dst"
@@ -69,6 +70,154 @@ func TestCompileExpression_FuncTagWithoutEnclosingFuncErrors(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no enclosing function is available")
+}
+
+func TestCompileExpression_FuncArgumentOfType_Found(t *testing.T) {
+	tmpl, err := newCallTemplate(`traced({{ .FuncArgumentOfType "context.Context" }}, {{ . }})`)
+	require.NoError(t, err)
+
+	enclosing := parseFunc(t, "package main\nfunc Handler(ctx context.Context, name string) {}")
+	originalCall := &dst.CallExpr{Fun: &dst.Ident{Name: "funcCall"}}
+
+	result, err := tmpl.compileExpression(originalCall, enclosing)
+
+	require.NoError(t, err)
+	resultCall, ok := result.(*dst.CallExpr)
+	require.True(t, ok, "expected *dst.CallExpr, got %T", result)
+	require.Len(t, resultCall.Args, 2)
+	argIdent, ok := resultCall.Args[0].(*dst.Ident)
+	require.True(t, ok, "expected *dst.Ident, got %T", resultCall.Args[0])
+	assert.Equal(t, "ctx", argIdent.Name)
+}
+
+func TestCompileExpression_FuncArgumentOfType_NotFound(t *testing.T) {
+	tmpl, err := newCallTemplate(`wrap("{{ .FuncArgumentOfType "io.Reader" }}", {{ . }})`)
+	require.NoError(t, err)
+
+	enclosing := parseFunc(t, "package main\nfunc Handler(ctx context.Context, name string) {}")
+	originalCall := &dst.CallExpr{Fun: &dst.Ident{Name: "funcCall"}}
+
+	result, err := tmpl.compileExpression(originalCall, enclosing)
+
+	require.NoError(t, err)
+	resultCall, ok := result.(*dst.CallExpr)
+	require.True(t, ok, "expected *dst.CallExpr, got %T", result)
+	require.Len(t, resultCall.Args, 2)
+	lit, ok := resultCall.Args[0].(*dst.BasicLit)
+	require.True(t, ok, "expected *dst.BasicLit, got %T", resultCall.Args[0])
+	assert.Equal(t, `""`, lit.Value)
+}
+
+func TestCompileExpression_FuncArgumentOfType_NoEnclosingFuncErrors(t *testing.T) {
+	tmpl, err := newCallTemplate(`traced({{ .FuncArgumentOfType "context.Context" }})`)
+	require.NoError(t, err)
+
+	originalCall := &dst.CallExpr{Fun: &dst.Ident{Name: "funcCall"}}
+
+	_, err = tmpl.compileExpression(originalCall, nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no enclosing function is available")
+}
+
+func TestCompileExpression_CallArgumentIsWrappedCallNotEnclosingFunc(t *testing.T) {
+	tmpl, err := newCallTemplate("traced({{ .CallArgument 0 }}, {{ .FuncArgument 0 }}, {{ . }})")
+	require.NoError(t, err)
+
+	enclosing := parseFunc(t, "package main\nfunc Handler(outerParam string) {}")
+	originalCall := &dst.CallExpr{
+		Fun:  &dst.Ident{Name: "getValue"},
+		Args: []dst.Expr{&dst.Ident{Name: "innerArg"}},
+	}
+
+	result, err := tmpl.compileExpression(originalCall, enclosing)
+
+	require.NoError(t, err)
+	resultCall, ok := result.(*dst.CallExpr)
+	require.True(t, ok, "expected *dst.CallExpr, got %T", result)
+	require.Len(t, resultCall.Args, 3)
+
+	callArg, ok := resultCall.Args[0].(*dst.Ident)
+	require.True(t, ok, "expected *dst.Ident, got %T", resultCall.Args[0])
+	assert.Equal(t, "innerArg", callArg.Name, "CallArgument must resolve to the wrapped call's own argument")
+
+	funcArg, ok := resultCall.Args[1].(*dst.Ident)
+	require.True(t, ok, "expected *dst.Ident, got %T", resultCall.Args[1])
+	assert.Equal(t, "outerParam", funcArg.Name, "FuncArgument must resolve to the enclosing function's parameter")
+}
+
+func TestCompileExpression_CallArgumentCount(t *testing.T) {
+	tmpl, err := newCallTemplate("wrap({{ .CallArgumentCount }}, {{ . }})")
+	require.NoError(t, err)
+
+	originalCall := &dst.CallExpr{
+		Fun:  &dst.Ident{Name: "getValue"},
+		Args: []dst.Expr{&dst.Ident{Name: "a"}, &dst.Ident{Name: "b"}},
+	}
+
+	result, err := tmpl.compileExpression(originalCall, nil)
+
+	require.NoError(t, err)
+	resultCall, ok := result.(*dst.CallExpr)
+	require.True(t, ok, "expected *dst.CallExpr, got %T", result)
+	require.Len(t, resultCall.Args, 2)
+	countLit, ok := resultCall.Args[0].(*dst.BasicLit)
+	require.True(t, ok, "expected *dst.BasicLit, got %T", resultCall.Args[0])
+	assert.Equal(t, "2", countLit.Value)
+}
+
+func TestCompileExpression_CallArgumentOutOfRange(t *testing.T) {
+	tmpl, err := newCallTemplate("wrap({{ .CallArgument 5 }})")
+	require.NoError(t, err)
+
+	originalCall := &dst.CallExpr{
+		Fun:  &dst.Ident{Name: "f"},
+		Args: []dst.Expr{&dst.Ident{Name: "a"}},
+	}
+
+	_, err = tmpl.compileExpression(originalCall, nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "out of range")
+}
+
+func TestCompileExpression_CallArgumentRequiresCallExpr(t *testing.T) {
+	tmpl, err := newCallTemplate("wrap({{ .CallArgument 0 }})")
+	require.NoError(t, err)
+
+	// A package-level var/const initializer that isn't itself a call, e.g.
+	// `var x = 5` - CallArgument only makes sense for wrap_call's matched
+	// call site, not decl rule's arbitrary wrapped expression.
+	nonCall := &dst.BasicLit{Kind: token.INT, Value: "5"}
+
+	_, err = tmpl.compileExpression(nonCall, nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "function call")
+}
+
+func TestCompileExpression_CallArgumentComplexExpression(t *testing.T) {
+	tmpl, err := newCallTemplate("wrap({{ .CallArgument 0 }}, {{ . }})")
+	require.NoError(t, err)
+
+	originalCall := &dst.CallExpr{
+		Fun: &dst.Ident{Name: "f"},
+		Args: []dst.Expr{
+			&dst.BinaryExpr{X: &dst.Ident{Name: "a"}, Op: token.ADD, Y: &dst.Ident{Name: "b"}},
+		},
+	}
+
+	result, err := tmpl.compileExpression(originalCall, nil)
+
+	require.NoError(t, err)
+	resultCall, ok := result.(*dst.CallExpr)
+	require.True(t, ok, "expected *dst.CallExpr, got %T", result)
+	require.Len(t, resultCall.Args, 2)
+	arg, ok := resultCall.Args[0].(*dst.BinaryExpr)
+	require.True(t, ok, "expected *dst.BinaryExpr, got %T", resultCall.Args[0])
+	xIdent, ok := arg.X.(*dst.Ident)
+	require.True(t, ok, "expected *dst.Ident, got %T", arg.X)
+	assert.Equal(t, "a", xIdent.Name)
 }
 
 func TestCompileExpression_SimpleWrapping(t *testing.T) {

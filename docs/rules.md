@@ -751,11 +751,22 @@ Currently supported replace string features:
 - IIFE (Immediately-Invoked Function Expression): `(func() T { return {{ . }} })()`
 - Complex expressions with multiple statements using IIFE
 
-**Function Template Variables:**
+**Template Placeholders:**
 
-In addition to `{{ . }}`, `replace` supports the shared function template variables, referenced as fields on the template's `.` — `{{.FuncName}}`, `{{.FuncArgument N}}`, `{{.FuncReturn N}}`, `{{.FuncArgumentCount}}`, and `{{.FuncReturnCount}}`. These resolve against the **enclosing function**: the named top-level function whose body contains the matched call site (not the matched call's own arguments). Whitespace and `-` trim markers around the placeholder are honored per normal `text/template` rules, so `{{.FuncName}}`, `{{ .FuncName }}`, and `{{- .FuncName -}}` are equivalent.
+| Placeholder                    | Replaced with                                                                                      |
+| ------------------------------ | -------------------------------------------------------------------------------------------------- |
+| `{{.FuncName}}`                | The name of the annotated function                                                                 |
+| `{{.FuncArgument N}}`          | The identifier of the N-th (0-indexed) parameter of the enclosing function, excluding the receiver |
+| `{{.FuncReturn N}}`            | The identifier of the N-th (0-indexed) return value of the enclosing function                      |
+| `{{.FuncArgumentCount}}`       | The number of parameters of the enclosing function, excluding the receiver                         |
+| `{{.FuncReturnCount}}`         | The number of return values of the enclosing function                                              |
+| `{{.FuncArgumentOfType type}}` | The first parameter of the enclosing function, excluding the receiver, matching the given type     |
+| `{{.CallArgument N}}`          | The identifier of the N-th (0-indexed) parameter of the enclosed function                          |
+| `{{.CallArgumentCount}}`       | The number of parameters of the enclosed function, excluding the receiver                          |
 
-A call site with no enclosing function has none of these available, so using one there fails the build with a descriptive error. Unnamed parameters and return values and blank (`_`) names, are assigned a synthetic name the first time a template references them.
+Whitespace and `-` trim markers around the placeholder are honored per normal `text/template` rules, so `{{.FuncName}}`, `{{ .FuncName }}`, and `{{- .FuncName -}}` are equivalent. Unnamed parameters and return values and blank (`_`) names, are assigned a synthetic name the first time a template references them.
+
+**Example:**
 
 ```yaml
 wrap_println:
@@ -786,6 +797,41 @@ func Handler(name string) {
     (func() (int, error) {
         println("handler arg:", name)
         return fmt.Println("hello")
+    })()
+}
+```
+
+**Example**
+
+```yaml
+wrap_println:
+  target: main
+  where:
+    function_call: fmt.Println
+  do:
+    - wrap_call:
+        replace: |-
+          (func() (int, error) {
+            println("call arg0:", {{ .CallArgument 0 }}, "nargs:", {{ .CallArgumentCount }}, "reader ok:", {{ .FuncArgumentOfType "io.Reader" }} != nil)
+            return {{ . }}
+          })()
+```
+
+Given:
+
+```go
+func Handler(r io.Reader, name string) {
+    fmt.Println("hello", name)
+}
+```
+
+`{{ .CallArgument 0 }}` resolves to the call's own first argument (`"hello"`, a literal - not one of `Handler`'s parameters), `{{ .CallArgumentCount }}` resolves to `2`, and `{{ .FuncArgumentOfType "io.Reader" }}` resolves to `r` (the enclosing function's parameter):
+
+```go
+func Handler(r io.Reader, name string) {
+    (func() (int, error) {
+        println("call arg0:", "hello", "nargs:", 2, "reader ok:", r != nil)
+        return fmt.Println("hello", name)
     })()
 }
 ```
