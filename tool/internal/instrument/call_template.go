@@ -331,14 +331,19 @@ func exprSourceText(expr dst.Expr) (string, error) {
 	if _, err := restorer.RestoreFile(synthetic); err != nil {
 		return "", ex.Wrapf(err, "failed to restore expression to source")
 	}
-	astNode, ok := restorer.Ast.Nodes[cloned]
-	if !ok {
-		return "", ex.New("failed to locate restored expression node")
-	}
+	return nodeSourceText(restorer, cloned)
+}
 
+// nodeSourceText looks up node's restored counterpart in restorer and
+// renders it back to Go source text.
+func nodeSourceText(restorer *decorator.Restorer, node dst.Node) (string, error) {
+	astNode, ok := restorer.Ast.Nodes[node]
+	if !ok {
+		return "", ex.New("failed to locate restored node")
+	}
 	var buf strings.Builder
 	if err := format.Node(&buf, restorer.Fset, astNode); err != nil {
-		return "", ex.Wrapf(err, "failed to format expression")
+		return "", ex.Wrapf(err, "failed to format node")
 	}
 	return buf.String(), nil
 }
