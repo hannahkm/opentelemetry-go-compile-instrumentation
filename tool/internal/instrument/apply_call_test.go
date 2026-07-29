@@ -221,7 +221,11 @@ func Run(name string) {
 		err := newTestPhase().applyCallRule(context.Background(), newRule(), root)
 
 		require.NoError(t, err)
-		assert.False(t, fileImportsPath(root, "fmt"), "import must not be added when no matched call site references it")
+		assert.False(
+			t,
+			fileImportsPath(root, "fmt"),
+			"import must not be added when no matched call site references it",
+		)
 	})
 
 	t.Run("multiple call sites", func(t *testing.T) {
@@ -240,7 +244,11 @@ func WithoutContext(name string) {
 		err := newTestPhase().applyCallRule(context.Background(), newRule(), root)
 
 		require.NoError(t, err)
-		assert.True(t, fileImportsPath(root, "fmt"), "import must be kept file-wide when any matched call site needs it")
+		assert.True(
+			t,
+			fileImportsPath(root, "fmt"),
+			"import must be kept file-wide when any matched call site needs it",
+		)
 	})
 }
 
@@ -253,8 +261,8 @@ func fileImportsPath(root *dst.File, path string) bool {
 			continue
 		}
 		for _, spec := range genDecl.Specs {
-			importSpec, ok := spec.(*dst.ImportSpec)
-			if ok && strings.Trim(importSpec.Path.Value, `"`) == path {
+			importSpec, specOk := spec.(*dst.ImportSpec)
+			if specOk && strings.Trim(importSpec.Path.Value, `"`) == path {
 				return true
 			}
 		}
