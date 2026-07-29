@@ -106,6 +106,16 @@ func fieldListContainsType(fields *dst.FieldList, typeStr string, imports map[st
 	return false, nil
 }
 
+// MatchesTypeName reports whether node's type matches the type-name string typeStr
+// Returns an error when typeStr cannot be parsed.
+func MatchesTypeName(node dst.Expr, typeStr string) (bool, error) {
+	tn, err := parseTypeName(typeStr)
+	if err != nil {
+		return false, err
+	}
+	return tn.matches(node, nil), nil
+}
+
 // importAliasMap builds a map from the local identifier used to reference an
 // imported package within file (its explicit alias, or its default package
 // name when unaliased) to that package's real import path. It correctly disambiguates:
