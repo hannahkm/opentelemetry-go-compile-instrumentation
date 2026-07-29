@@ -451,10 +451,15 @@ func TestCompileExpression_PlaceholderNotReplaced(t *testing.T) {
 	}
 
 	result, err := tmpl.compileExpression(originalCall, nil)
+	require.NoError(t, err)
 
-	require.Error(t, err)
-	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "placeholder")
+	resultCall, ok := result.(*dst.CallExpr)
+	require.True(t, ok, "expected *dst.CallExpr, got %T", result)
+	require.Len(t, resultCall.Args, 1)
+
+	lit, ok := resultCall.Args[0].(*dst.BasicLit)
+	require.True(t, ok, "expected *dst.BasicLit, got %T", resultCall.Args[0])
+	assert.Equal(t, `"_.PLACEHOLDER_0"`, lit.Value)
 }
 
 func TestCompileExpression_MultipleStatements(t *testing.T) {

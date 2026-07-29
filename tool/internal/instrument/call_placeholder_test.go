@@ -234,6 +234,68 @@ func TestReplacePlaceholder_ComplexAST(t *testing.T) {
 	assert.Equal(t, "right", rightCall.Fun.(*dst.Ident).Name)
 }
 
+func TestCompileExpression_NoPlaceholderReferenced(t *testing.T) {
+	tmpl, err := newCallTemplate(`traced.Call({{ .CallArgument 0 }})`)
+	require.NoError(t, err)
+
+	originalCall := &dst.CallExpr{
+		Fun:  &dst.Ident{Name: "getValue"},
+		Args: []dst.Expr{&dst.BasicLit{Value: `"resource"`}},
+	}
+
+	result, err := tmpl.compileExpression(originalCall, nil)
+	require.NoError(t, err)
+
+	resultCall, ok := result.(*dst.CallExpr)
+	require.True(t, ok, "expected *dst.CallExpr, got %T", result)
+	require.Len(t, resultCall.Args, 1)
+
+	arg, ok := resultCall.Args[0].(*dst.BasicLit)
+	require.True(t, ok, "expected *dst.BasicLit, got %T", resultCall.Args[0])
+	assert.Equal(t, `"resource"`, arg.Value)
+
+	_, found := replacePlaceholder(result, &dst.Ident{Name: "sentinel"})
+	assert.False(t, found, "fully-reconstructed result should contain no placeholder")
+}
+
+func TestCompileExpression_ConditionalTemplate(t *testing.T) {
+	tmpl, err := newCallTemplate(
+		`{{- $ctx := .FuncArgumentOfType "context.Context" -}}
+{{- if $ctx -}}
+traced.Call({{ $ctx }}, {{ .CallArgument 0 }})
+{{- else -}}
+{{ . }}
+{{- end -}}`)
+	require.NoError(t, err)
+
+	originalCall := &dst.CallExpr{
+		Fun:  &dst.Ident{Name: "getValue"},
+		Args: []dst.Expr{&dst.BasicLit{Value: `"resource"`}},
+	}
+
+	enclosing := parseFunc(t, "package main\nfunc Handler(ctx context.Context) {}")
+
+	result, err := tmpl.compileExpression(originalCall, enclosing)
+	require.NoError(t, err)
+
+	resultCall, ok := result.(*dst.CallExpr)
+	require.True(t, ok, "expected *dst.CallExpr, got %T", result)
+
+	sel, ok := resultCall.Fun.(*dst.SelectorExpr)
+	require.True(t, ok, "expected *dst.SelectorExpr, got %T", resultCall.Fun)
+	assert.Equal(t, "traced", sel.X.(*dst.Ident).Name)
+	assert.Equal(t, "Call", sel.Sel.Name)
+	require.Len(t, resultCall.Args, 2)
+
+	ctxArg, ok := resultCall.Args[0].(*dst.Ident)
+	require.True(t, ok, "expected *dst.Ident, got %T", resultCall.Args[0])
+	assert.Equal(t, "ctx", ctxArg.Name)
+
+	resourceArg, ok := resultCall.Args[1].(*dst.BasicLit)
+	require.True(t, ok, "expected *dst.BasicLit, got %T", resultCall.Args[1])
+	assert.Equal(t, `"resource"`, resourceArg.Value)
+}
+
 func TestReplacePlaceholder_NonSelectorNode(t *testing.T) {
 	// Create AST with non-selector nodes (should be ignored by replacer)
 	astWithLiteral := &dst.CallExpr{
