@@ -105,7 +105,7 @@ func TestFuncTemplateData_FuncArgumentOfType(t *testing.T) {
 
 	v, err = data.FuncArgumentOfType("io.Reader")
 	require.NoError(t, err)
-	assert.Equal(t, "", v)
+	assert.Empty(t, v)
 }
 
 func TestFuncTemplateData_FuncArgumentOfTypeExcludesReceiver(t *testing.T) {
@@ -114,7 +114,7 @@ func TestFuncTemplateData_FuncArgumentOfTypeExcludesReceiver(t *testing.T) {
 
 	v, err := data.FuncArgumentOfType("T")
 	require.NoError(t, err)
-	assert.Equal(t, "", v, "the receiver is not part of FuncArgumentOfType's search space")
+	assert.Empty(t, v, "the receiver is not part of FuncArgumentOfType's search space")
 
 	v, err = data.FuncArgumentOfType("int")
 	require.NoError(t, err)
@@ -139,7 +139,7 @@ func TestFuncTemplateData_FuncReturnOfType(t *testing.T) {
 
 	v, err = data.FuncReturnOfType("string")
 	require.NoError(t, err)
-	assert.Equal(t, "", v)
+	assert.Empty(t, v)
 }
 
 func TestFuncTemplateData_DirectiveArgs(t *testing.T) {
@@ -150,7 +150,7 @@ func TestFuncTemplateData_DirectiveArgs(t *testing.T) {
 	assert.Equal(t, args, data.DirectiveArgs())
 	assert.Equal(t, "my-op", data.DirectiveArg("span.name"))
 	assert.Equal(t, "v1", data.DirectiveArg("tag"))
-	assert.Equal(t, "", data.DirectiveArg("missing"))
+	assert.Empty(t, data.DirectiveArg("missing"))
 }
 
 func TestFuncTemplateData_DirectiveArgsEmpty(t *testing.T) {
@@ -158,5 +158,5 @@ func TestFuncTemplateData_DirectiveArgsEmpty(t *testing.T) {
 	data := newFuncTemplateData(funcDecl, nil)
 
 	assert.Empty(t, data.DirectiveArgs())
-	assert.Equal(t, "", data.DirectiveArg("span.name"))
+	assert.Empty(t, data.DirectiveArg("span.name"))
 }
