@@ -6,6 +6,7 @@ package instrument
 import (
 	"context"
 	"go/token"
+	"strings"
 	"testing"
 
 	"github.com/dave/dst"
@@ -131,6 +132,12 @@ traced.Call({{ $ctx }}, {{ .CallArgument 0 }})
 {{ . }}
 {{- end -}}`
 
+	newRule := func() *rule.InstCallRule {
+		r := httpGetRule(replace)
+		r.Imports = map[string]string{"traced": "fmt"}
+		return r
+	}
+
 	t.Run("context.Context argument present builds a new call", func(t *testing.T) {
 		root := parseFile(t, `package main
 
@@ -186,6 +193,116 @@ func Run(name string) {
 		assert.Equal(t, "Get", sel.Sel.Name)
 		require.Len(t, call.Args, 1)
 	})
+
+	t.Run("correctly add the import", func(t *testing.T) {
+		root := parseFile(t, `package main
+
+import "net/http"
+
+func Run(ctx context.Context) {
+	http.Get("url")
+}
+`)
+		err := newTestPhase().applyCallRule(context.Background(), newRule(), root)
+
+		require.NoError(t, err)
+		assert.True(t, fileImportsPath(root, "fmt"), "import must be added when the taken branch references it")
+	})
+
+	t.Run("do not add the import", func(t *testing.T) {
+		root := parseFile(t, `package main
+
+import "net/http"
+
+func Run(name string) {
+	http.Get("url")
+}
+`)
+		err := newTestPhase().applyCallRule(context.Background(), newRule(), root)
+
+		require.NoError(t, err)
+		assert.False(t, fileImportsPath(root, "fmt"), "import must not be added when no matched call site references it")
+	})
+
+	t.Run("multiple call sites", func(t *testing.T) {
+		root := parseFile(t, `package main
+
+import "net/http"
+
+func WithContext(ctx context.Context) {
+	http.Get("url")
+}
+
+func WithoutContext(name string) {
+	http.Get("url")
+}
+`)
+		err := newTestPhase().applyCallRule(context.Background(), newRule(), root)
+
+		require.NoError(t, err)
+		assert.True(t, fileImportsPath(root, "fmt"), "import must be kept file-wide when any matched call site needs it")
+	})
+}
+
+// fileImportsPath reports whether root has a top-level import declaration
+// for the given import path.
+func fileImportsPath(root *dst.File, path string) bool {
+	for _, decl := range root.Decls {
+		genDecl, ok := decl.(*dst.GenDecl)
+		if !ok || genDecl.Tok != token.IMPORT {
+			continue
+		}
+		for _, spec := range genDecl.Specs {
+			importSpec, ok := spec.(*dst.ImportSpec)
+			if ok && strings.Trim(importSpec.Path.Value, `"`) == path {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func TestUsedRuleImports_BlankAndDotAliasesAlwaysKept(t *testing.T) {
+	root := parseFile(t, `package main
+
+func f() {}
+`)
+	ruleImports := map[string]string{
+		"_": "example.com/sideeffect",
+		".": "example.com/dotimport",
+	}
+
+	used := usedRuleImports(root, ruleImports)
+
+	assert.Equal(t, ruleImports, used)
+}
+
+func TestUsedRuleImports_OnlyReferencedAliasesKept(t *testing.T) {
+	root := parseFile(t, `package main
+
+func f() {
+	traced.Call()
+}
+`)
+	ruleImports := map[string]string{
+		"traced":    "fmt",
+		"unrelated": "example.com/unrelated",
+	}
+
+	used := usedRuleImports(root, ruleImports)
+
+	assert.Equal(t, map[string]string{"traced": "fmt"}, used)
+}
+
+func TestUsedRuleImports_EmptyRuleImports(t *testing.T) {
+	root := parseFile(t, `package main
+
+func f() {}
+`)
+
+	used := usedRuleImports(root, nil)
+
+	assert.Nil(t, used)
 }
 
 func TestApplyCallRule_FuncTagWithoutEnclosingFunctionErrors(t *testing.T) {
