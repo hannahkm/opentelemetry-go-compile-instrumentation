@@ -14,7 +14,8 @@ import (
 // return values to text/template renderers. Argument and return collection
 // mutates the underlying FuncDecl.
 type funcTemplateData struct {
-	funcDecl *dst.FuncDecl
+	funcDecl      *dst.FuncDecl
+	directiveArgs []ast.DirectiveArg
 
 	argsCollected bool
 	args          []string
@@ -23,8 +24,11 @@ type funcTemplateData struct {
 	rets          []string
 }
 
-func newFuncTemplateData(funcDecl *dst.FuncDecl) *funcTemplateData {
-	return &funcTemplateData{funcDecl: funcDecl}
+// newFuncTemplateData builds the template data for funcDecl. directiveArgs
+// are the key:value arguments parsed from the directive comment that matched
+// funcDecl (nil for callers that don't have directive args, e.g. raw rules).
+func newFuncTemplateData(funcDecl *dst.FuncDecl, directiveArgs []ast.DirectiveArg) *funcTemplateData {
+	return &funcTemplateData{funcDecl: funcDecl, directiveArgs: directiveArgs}
 }
 
 // FuncName returns the matched function's name. Template usage: {{.FuncName}}
@@ -80,8 +84,84 @@ func (d *funcTemplateData) FuncArgumentCount() int {
 	return len(d.arguments())
 }
 
+// argumentOfType returns the identifier of the first parameter (excluding
+// the receiver) whose type matches typeStr or "" if no parameter matches.
+func (d *funcTemplateData) argumentOfType(typeStr string) (string, error) {
+	args := d.arguments() // ensures synthetic names are assigned first
+	idx := 0
+	for _, field := range d.funcDecl.Type.Params.List {
+		for range field.Names {
+			matched, err := ast.MatchesTypeName(field.Type, typeStr)
+			if err != nil {
+				return "", err
+			}
+			if matched {
+				return args[idx], nil
+			}
+			idx++
+		}
+	}
+	return "", nil
+}
+
 // FuncReturnCount returns the number of return values. Template usage:
 // {{.FuncReturnCount}}
 func (d *funcTemplateData) FuncReturnCount() int {
 	return len(d.returns())
+}
+
+// FuncArgumentOfType returns the identifier of the first parameter (excluding
+// the receiver) whose type matches typeStr, or "" if none match. Template
+// usage: {{ .FuncArgumentOfType "context.Context" }}
+func (d *funcTemplateData) FuncArgumentOfType(typeStr string) (string, error) {
+	return d.argumentOfType(typeStr)
+}
+
+// returnOfType returns the identifier of the first return value whose type
+// matches typeStr or "" if no return value matches.
+func (d *funcTemplateData) returnOfType(typeStr string) (string, error) {
+	rets := d.returns() // ensures synthetic names are assigned first
+	if d.funcDecl.Type.Results == nil {
+		return "", nil
+	}
+	idx := 0
+	for _, field := range d.funcDecl.Type.Results.List {
+		for range field.Names {
+			matched, err := ast.MatchesTypeName(field.Type, typeStr)
+			if err != nil {
+				return "", err
+			}
+			if matched {
+				return rets[idx], nil
+			}
+			idx++
+		}
+	}
+	return "", nil
+}
+
+// FuncReturnOfType returns the identifier of the first return value whose
+// type matches typeStr, or "" if none match. Template usage:
+// {{ .FuncReturnOfType "error" }}
+func (d *funcTemplateData) FuncReturnOfType(typeStr string) (string, error) {
+	return d.returnOfType(typeStr)
+}
+
+// DirectiveArgs returns the key:value arguments parsed from the directive
+// comment that matched this function. Template usage:
+// {{ range .DirectiveArgs }}{{.Key}}={{.Value}} {{ end }}
+func (d *funcTemplateData) DirectiveArgs() []ast.DirectiveArg {
+	return d.directiveArgs
+}
+
+// DirectiveArg returns the value of the first directive argument with the
+// given key, or "" if the directive comment has no such argument. Template
+// usage: {{ .DirectiveArg "span.name" }}
+func (d *funcTemplateData) DirectiveArg(key string) string {
+	for _, arg := range d.directiveArgs {
+		if arg.Key == key {
+			return arg.Value
+		}
+	}
+	return ""
 }
