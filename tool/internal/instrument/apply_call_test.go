@@ -123,6 +123,71 @@ func Handler(name string) {
 	assert.Equal(t, "name", nameArg.Name)
 }
 
+func TestApplyCallRule_ConditionalReplace(t *testing.T) {
+	replace := `{{- $ctx := .FuncArgumentOfType "context.Context" -}}
+{{- if $ctx -}}
+traced.Call({{ $ctx }}, {{ .CallArgument 0 }})
+{{- else -}}
+{{ . }}
+{{- end -}}`
+
+	t.Run("context.Context argument present builds a new call", func(t *testing.T) {
+		root := parseFile(t, `package main
+
+import "net/http"
+
+func Run(ctx context.Context) {
+	http.Get("url")
+}
+`)
+		r := httpGetRule(replace)
+
+		err := newTestPhase().applyCallRule(context.Background(), r, root)
+		require.NoError(t, err)
+
+		fn := findFuncDeclInFile(t, root, "Run")
+		stmt := fn.Body.List[0].(*dst.ExprStmt)
+		call, ok := stmt.X.(*dst.CallExpr)
+		require.True(t, ok, "expected *dst.CallExpr, got %T", stmt.X)
+
+		sel, ok := call.Fun.(*dst.SelectorExpr)
+		require.True(t, ok, "expected *dst.SelectorExpr, got %T", call.Fun)
+		assert.Equal(t, "traced", sel.X.(*dst.Ident).Name)
+		assert.Equal(t, "Call", sel.Sel.Name)
+		require.Len(t, call.Args, 2)
+
+		ctxArg, ok := call.Args[0].(*dst.Ident)
+		require.True(t, ok, "expected *dst.Ident, got %T", call.Args[0])
+		assert.Equal(t, "ctx", ctxArg.Name)
+	})
+
+	t.Run("no context.Context argument wraps the original call", func(t *testing.T) {
+		root := parseFile(t, `package main
+
+import "net/http"
+
+func Run(name string) {
+	http.Get("url")
+}
+`)
+		r := httpGetRule(replace)
+
+		err := newTestPhase().applyCallRule(context.Background(), r, root)
+		require.NoError(t, err)
+
+		fn := findFuncDeclInFile(t, root, "Run")
+		stmt := fn.Body.List[0].(*dst.ExprStmt)
+		call, ok := stmt.X.(*dst.CallExpr)
+		require.True(t, ok, "expected *dst.CallExpr, got %T", stmt.X)
+
+		sel, ok := call.Fun.(*dst.SelectorExpr)
+		require.True(t, ok, "expected *dst.SelectorExpr, got %T", call.Fun)
+		assert.Equal(t, "http", sel.X.(*dst.Ident).Name)
+		assert.Equal(t, "Get", sel.Sel.Name)
+		require.Len(t, call.Args, 1)
+	})
+}
+
 func TestApplyCallRule_FuncTagWithoutEnclosingFunctionErrors(t *testing.T) {
 	root := parseFile(t, `package main
 

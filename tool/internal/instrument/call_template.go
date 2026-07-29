@@ -227,10 +227,7 @@ func (t *callTemplate) compileExpression(node dst.Expr, enclosing *dst.FuncDecl)
 	}
 
 	// Replace placeholder with the actual node
-	result, replaced := replacePlaceholder(exprStmt.X, node)
-	if !replaced {
-		return nil, ex.New("template output did not contain placeholder expression")
-	}
+	result, _ := replacePlaceholder(exprStmt.X, node)
 
 	resultExpr, ok := result.(dst.Expr)
 	if !ok {
