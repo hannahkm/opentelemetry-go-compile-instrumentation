@@ -129,7 +129,7 @@ func (d *callTemplateData) FuncReturnCount() (int, error) {
 func (t *callTemplate) compileExpression(node dst.Expr, enclosing *dst.FuncDecl) (dst.Expr, error) {
 	data := &callTemplateData{}
 	if enclosing != nil {
-		data.enclosing = newFuncTemplateData(enclosing)
+		data.enclosing = newFuncTemplateData(enclosing, nil)
 	}
 
 	var sb strings.Builder
