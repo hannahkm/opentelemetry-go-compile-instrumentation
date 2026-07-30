@@ -64,11 +64,11 @@ func usedRuleImports(root *dst.File, ruleImports map[string]string) map[string]s
 		if !ok {
 			return true
 		}
-		ident, ok := sel.X.(*dst.Ident)
-		if !ok {
+		ident, identOk := sel.X.(*dst.Ident)
+		if !identOk {
 			return true
 		}
-		if path, ok := ruleImports[ident.Name]; ok {
+		if path, importOk := ruleImports[ident.Name]; importOk {
 			used[ident.Name] = path
 		}
 		return true

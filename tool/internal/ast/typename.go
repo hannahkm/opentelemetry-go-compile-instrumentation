@@ -57,7 +57,7 @@ func (t parsedTypeName) matches(node dst.Expr, imports map[string]string) bool {
 			// Populated by a resolving decorator; already the real import path.
 			return t.importPath == ident.Path && t.name == n.Sel.Name
 		}
-		if resolved, ok := imports[ident.Name]; ok {
+		if resolved, importOk := imports[ident.Name]; importOk {
 			return t.importPath == resolved && t.name == n.Sel.Name
 		}
 		// No import context resolved this qualifier (nil/incomplete imports

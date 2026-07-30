@@ -51,7 +51,7 @@ func renderRawCode(raw string, decl *dst.FuncDecl) (string, error) {
 	if err != nil {
 		return "", ex.Wrap(err)
 	}
-	return tmpl.Execute(newFuncTemplateData(decl))
+	return tmpl.Execute(newFuncTemplateData(decl, nil))
 }
 
 type insertPos struct {

@@ -172,7 +172,7 @@ func (d *callTemplateData) CallArgument(idx int) (string, error) {
 func (t *callTemplate) compileExpression(node dst.Expr, enclosing *dst.FuncDecl) (dst.Expr, error) {
 	data := &callTemplateData{}
 	if enclosing != nil {
-		data.enclosing = newFuncTemplateData(enclosing)
+		data.enclosing = newFuncTemplateData(enclosing, nil)
 	}
 	if call, ok := unwrap(node).(*dst.CallExpr); ok {
 		data.isCall = true
