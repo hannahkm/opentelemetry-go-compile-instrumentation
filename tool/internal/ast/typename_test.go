@@ -120,14 +120,120 @@ func TestTypeNameMatches(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tn, err := parseTypeName(tt.typeStr)
 			require.NoError(t, err)
-			assert.Equal(t, tt.want, tn.matches(tt.node))
+			assert.Equal(t, tt.want, tn.matches(tt.node, nil))
 		})
 	}
 }
 
+// TestTypeNameMatches_FullyQualifiedMultiSegmentImport is a regression test
+// for the bug where a fully-qualified multi-segment import path (as every
+// real otelc.yaml rule actually writes it, e.g. "*net/http.Request") never
+// matched the qualified identifier written at the use site (e.g. "http" in
+// `r *http.Request`), because matches compared the identifier directly
+// against the *whole* import path instead of resolving it. This previously
+// caused any where.param/where.result join-point filter (and any
+// FuncArgumentOfType-style template lookup) naming a nested-package type to
+// silently never match.
+func TestTypeNameMatches_FullyQualifiedMultiSegmentImport(t *testing.T) {
+	node := &dst.StarExpr{
+		X: &dst.SelectorExpr{
+			X:   &dst.Ident{Name: "http"},
+			Sel: &dst.Ident{Name: "Request"},
+		},
+	}
+
+	tn, err := parseTypeName("*net/http.Request")
+	require.NoError(t, err)
+
+	t.Run("no import context falls back to path-tail match", func(t *testing.T) {
+		assert.True(t, tn.matches(node, nil))
+	})
+
+	t.Run("resolved import context matches", func(t *testing.T) {
+		imports := map[string]string{"http": "net/http"}
+		assert.True(t, tn.matches(node, imports))
+	})
+
+	t.Run("import context resolving to a different package does not match", func(t *testing.T) {
+		// "http" is aliased to an unrelated package in this (contrived) file;
+		// the real import path wins over the bare identifier text.
+		imports := map[string]string{"http": "example.com/other/http"}
+		assert.False(t, tn.matches(node, imports))
+	})
+}
+
+// TestTypeNameMatches_ImportAliasResolution covers cases the path-tail
+// fallback cannot handle correctly on its own: an explicit import alias, and
+// two distinct import paths that share a last path segment.
+func TestTypeNameMatches_ImportAliasResolution(t *testing.T) {
+	t.Run("explicit alias resolves correctly", func(t *testing.T) {
+		// import althttp "net/http"; func f(r *althttp.Request)
+		node := &dst.StarExpr{
+			X: &dst.SelectorExpr{X: &dst.Ident{Name: "althttp"}, Sel: &dst.Ident{Name: "Request"}},
+		}
+		tn, err := parseTypeName("*net/http.Request")
+		require.NoError(t, err)
+
+		imports := map[string]string{"althttp": "net/http"}
+		assert.True(t, tn.matches(node, imports))
+
+		// Without import context, the tail fallback can't know "althttp" means
+		// net/http, so it correctly declines to match rather than guessing.
+		assert.False(t, tn.matches(node, nil))
+	})
+
+	t.Run("colliding last path segments are disambiguated", func(t *testing.T) {
+		// Both html/template and text/template default to the local name
+		// "template"; only the file's actual import decides which one a
+		// "template.Template" reference in that file means.
+		node := &dst.SelectorExpr{X: &dst.Ident{Name: "template"}, Sel: &dst.Ident{Name: "Template"}}
+
+		textTemplate, err := parseTypeName("text/template.Template")
+		require.NoError(t, err)
+		htmlTemplate, err := parseTypeName("html/template.Template")
+		require.NoError(t, err)
+
+		importsText := map[string]string{"template": "text/template"}
+		assert.True(t, textTemplate.matches(node, importsText))
+		assert.False(t, htmlTemplate.matches(node, importsText))
+
+		importsHTML := map[string]string{"template": "html/template"}
+		assert.False(t, textTemplate.matches(node, importsHTML))
+		assert.True(t, htmlTemplate.matches(node, importsHTML))
+	})
+}
+
+func TestImportAliasMap(t *testing.T) {
+	t.Run("nil file returns nil", func(t *testing.T) {
+		assert.Nil(t, importAliasMap(nil))
+	})
+
+	t.Run("resolves default and aliased imports, skips blank and dot imports", func(t *testing.T) {
+		p := NewAstParser()
+		file, err := p.ParseSource(`package main
+
+import (
+	"net/http"
+	althttp "net/http"
+	_ "unsafe"
+	. "fmt"
+)
+
+func f(r *http.Request, r2 *althttp.Request) {}
+`)
+		require.NoError(t, err)
+
+		imports := importAliasMap(file)
+		assert.Equal(t, "net/http", imports["http"])
+		assert.Equal(t, "net/http", imports["althttp"])
+		assert.NotContains(t, imports, "_")
+		assert.NotContains(t, imports, ".")
+	})
+}
+
 func mustContains(t *testing.T, fields *dst.FieldList, typeStr string) bool {
 	t.Helper()
-	ok, err := fieldListContainsType(fields, typeStr)
+	ok, err := fieldListContainsType(fields, typeStr, nil)
 	require.NoError(t, err)
 	return ok
 }
@@ -154,7 +260,7 @@ func TestFieldListContainsType(t *testing.T) {
 	assert.False(t, mustContains(t, nil, "error"))
 	assert.False(t, mustContains(t, &dst.FieldList{}, "error"))
 
-	_, err := fieldListContainsType(fields, "[]invalid")
+	_, err := fieldListContainsType(fields, "[]invalid", nil)
 	assert.Error(t, err)
 }
 
