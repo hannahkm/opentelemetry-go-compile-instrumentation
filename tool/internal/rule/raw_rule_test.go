@@ -8,98 +8,136 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v3"
 )
 
 func TestNewInstRawRule(t *testing.T) {
 	tests := []struct {
-		name        string
-		yamlContent string
-		ruleName    string
-		expectError bool
+		name    string
+		yaml    string
+		ruleID  string
+		wantErr bool
+		check   func(*testing.T, *InstRawRule)
 	}{
 		{
-			name: "valid raw",
-			yamlContent: `
-func: Bar
+			name:   "minimal valid rule",
+			ruleID: "raw1",
+			yaml: `
 target: main
-raw: "_ = 0"
+func: Bar
+raw: println("hi")
 `,
-			ruleName:    "test-raw",
-			expectError: false,
+			check: func(t *testing.T, r *InstRawRule) {
+				assert.Equal(t, "raw1", r.Name)
+				assert.Equal(t, "main", r.Target)
+				assert.Equal(t, "Bar", r.Func)
+				assert.Equal(t, `println("hi")`, r.Raw)
+			},
 		},
 		{
-			name: "valid raw with template tag",
-			yamlContent: `
-func: Bar
+			name:   "explicit name is preserved",
+			ruleID: "fallback",
+			yaml: `
+name: explicit
 target: main
+func: Bar
+raw: println()
+`,
+			check: func(t *testing.T, r *InstRawRule) {
+				assert.Equal(t, "explicit", r.Name)
+			},
+		},
+		{
+			name:   "valid placement before with pattern",
+			ruleID: "raw2",
+			yaml: `
+target: main
+func: Bar
+recv: "*Recv"
+raw: println()
+pattern: "^name := getName\\(\\)$"
+placement: before
+`,
+			check: func(t *testing.T, r *InstRawRule) {
+				assert.Equal(t, "*Recv", r.Recv)
+				assert.Equal(t, "before", r.Placement)
+				assert.Equal(t, `^name := getName\(\)$`, r.Pattern)
+			},
+		},
+		{
+			name:   "valid placement after",
+			ruleID: "raw3",
+			yaml: `
+target: main
+func: Bar
+raw: println()
+placement: after
+`,
+			check: func(t *testing.T, r *InstRawRule) {
+				assert.Equal(t, "after", r.Placement)
+			},
+		},
+		{
+			name:   "valid raw with template tag",
+			ruleID: "templated-raw",
+			yaml: `
+target: main
+func: Bar
 raw: "println({{ .FuncArgument 0 }})"
 `,
-			ruleName:    "templated-raw",
-			expectError: false,
+			check: func(t *testing.T, r *InstRawRule) {
+				assert.Equal(t, "println({{ .FuncArgument 0 }})", r.Raw)
+			},
 		},
 		{
-			name: "empty raw",
-			yamlContent: `
-func: Bar
-target: main
-raw: ""
-`,
-			ruleName:    "empty-raw",
-			expectError: true,
+			name:    "empty raw is rejected",
+			ruleID:  "raw4",
+			yaml:    "target: main\nfunc: Bar\nraw: \"   \"",
+			wantErr: true,
 		},
 		{
-			name: "invalid template syntax in raw",
-			yamlContent: `
-func: Bar
-target: main
-raw: "println({{ FuncArgument 0 )"
-`,
-			ruleName:    "bad-template-raw",
-			expectError: true,
+			name:    "missing raw is rejected",
+			ruleID:  "raw5",
+			yaml:    "target: main\nfunc: Bar",
+			wantErr: true,
 		},
 		{
-			name: "invalid pattern",
-			yamlContent: `
-func: Bar
-target: main
-raw: "_ = 0"
-pattern: "["
-`,
-			ruleName:    "bad-pattern",
-			expectError: true,
+			name:    "invalid template syntax in raw",
+			ruleID:  "bad-template-raw",
+			yaml:    `target: main` + "\n" + `func: Bar` + "\n" + `raw: "println({{ FuncArgument 0 )"`,
+			wantErr: true,
 		},
 		{
-			name: "invalid placement",
-			yamlContent: `
-func: Bar
-target: main
-raw: "_ = 0"
-placement: "sideways"
-`,
-			ruleName:    "bad-placement",
-			expectError: true,
+			name:    "invalid regex pattern is rejected",
+			ruleID:  "raw6",
+			yaml:    "target: main\nfunc: Bar\nraw: println()\npattern: \"(unclosed\"",
+			wantErr: true,
+		},
+		{
+			name:    "invalid placement value is rejected",
+			ruleID:  "raw7",
+			yaml:    "target: main\nfunc: Bar\nraw: println()\nplacement: sideways",
+			wantErr: true,
+		},
+		{
+			name:    "malformed yaml is rejected",
+			ruleID:  "raw8",
+			yaml:    "target: main\n  bad: [unterminated",
+			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var fields map[string]any
-			err := yaml.Unmarshal([]byte(tt.yamlContent), &fields)
-			require.NoError(t, err)
-
-			data, err := yaml.Marshal(fields)
-			require.NoError(t, err)
-
-			r, err := NewInstRawRule(data, tt.ruleName)
-			if tt.expectError {
+			r, err := NewInstRawRule([]byte(tt.yaml), tt.ruleID)
+			if tt.wantErr {
 				require.Error(t, err)
-				require.Nil(t, r)
 				return
 			}
 			require.NoError(t, err)
 			require.NotNil(t, r)
-			assert.Equal(t, tt.ruleName, r.GetName())
+			if tt.check != nil {
+				tt.check(t, r)
+			}
 		})
 	}
 }
