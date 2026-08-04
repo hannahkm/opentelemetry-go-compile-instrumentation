@@ -38,6 +38,20 @@ func renameReturnValues(funcDecl *dst.FuncDecl) {
 	}
 }
 
+// renderRawCode renders the shared function template variables (FuncName,
+// FuncArgument N, FuncReturn N, ...) in raw code injected by a raw rule. Raw
+// code that does not contain "{{" is returned unchanged.
+func renderRawCode(raw string, decl *dst.FuncDecl) (string, error) {
+	if !strings.Contains(raw, "{{") {
+		return raw, nil
+	}
+	tmpl, err := rule.ParseFuncTemplate(raw)
+	if err != nil {
+		return "", ex.Wrap(err)
+	}
+	return tmpl.Execute(newFuncTemplateData(decl, nil))
+}
+
 type insertPos struct {
 	pattern   *regexp.Regexp
 	placement string
@@ -106,9 +120,15 @@ func insertRaw(ctx context.Context, r *rule.InstRawRule, decl *dst.FuncDecl, roo
 
 	// Rename the unnamed return values so that the raw code can reference them
 	renameReturnValues(decl)
+
+	raw, err := renderRawCode(r.Raw, decl)
+	if err != nil {
+		return ex.Wrapf(err, "rendering template for func %s", decl.Name.Name)
+	}
+
 	// Parse the raw code into AST statements
 	p := ast.NewAstParser()
-	stmts, err := p.ParseSnippet(r.Raw)
+	stmts, err := p.ParseSnippet(raw)
 	if err != nil {
 		return err
 	}

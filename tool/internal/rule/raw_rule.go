@@ -52,6 +52,12 @@ func (r *InstRawRule) validate() error {
 	if strings.TrimSpace(r.Raw) == "" {
 		return ex.Newf("raw cannot be empty")
 	}
+	// raw is only treated as a template when it contains "{{"
+	if strings.Contains(r.Raw, "{{") {
+		if _, err := ParseFuncTemplate(r.Raw); err != nil {
+			return ex.Wrapf(err, "invalid template syntax in raw")
+		}
+	}
 	if _, err := regexp.Compile(r.Pattern); err != nil {
 		return ex.Wrapf(err, "invalid regex pattern for raw rule: %q", r.Pattern)
 	}
