@@ -617,7 +617,7 @@ Top-level `imports` (map[string]string, optional): A map of imports to inject in
 **Template Placeholders:**
 
 | Placeholder              | Replaced with                                                            |
-| ------------------------ | ------------------------------------------------------------------------- |
+| ------------------------ | -------------------------------------------------------------------------|
 | `{{.FuncName}}`          | The name of the target function                                          |
 | `{{.FuncArgument N}}`    | The identifier of the N-th (0-indexed) parameter, excluding the receiver |
 | `{{.FuncReturn N}}`      | The identifier of the N-th (0-indexed) return value                      |
