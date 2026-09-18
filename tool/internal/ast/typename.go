@@ -135,6 +135,17 @@ func MatchesTypeName(node dst.Expr, typeStr string, imports map[string]string) (
 //
 // Returns nil when file is nil.
 func ImportAliasMap(file *dst.File, resolvedNames map[string]string) map[string]string {
+	return importAliasMap(file, resolvedNames, true)
+}
+
+// ResolvedImportAliasMap builds the same map as ImportAliasMap, but omits any
+// unaliased import whose package name isn't in resolvedNames.
+// Returns nil when file is nil.
+func ResolvedImportAliasMap(file *dst.File, resolvedNames map[string]string) map[string]string {
+	return importAliasMap(file, resolvedNames, false)
+}
+
+func importAliasMap(file *dst.File, resolvedNames map[string]string, allowGuess bool) map[string]string {
 	if file == nil {
 		return nil
 	}
@@ -165,11 +176,16 @@ func ImportAliasMap(file *dst.File, resolvedNames map[string]string) map[string]
 			continue
 		}
 		alias := defaultImportAlias(path)
-		if name, ok := resolvedNames[path]; ok && name != "" {
+		name, resolved := resolvedNames[path]
+		if resolved && name != "" {
 			alias = name
 		}
 		if imp.Name != nil {
 			alias = imp.Name.Name
+			resolved = true
+		}
+		if !allowGuess && !resolved {
+			continue
 		}
 		// Blank and dot imports don't introduce a qualified identifier that a
 		// type reference could use, so they can't participate in matching.
